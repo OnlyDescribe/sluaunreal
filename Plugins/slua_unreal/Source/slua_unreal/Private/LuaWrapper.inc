@@ -1511,7 +1511,22 @@
             return 1;
         }
 
+        static int get_CURRENT_FILE_ID_57_GENERATED_BODY(lua_State* L) {
+            CheckSelf(FSoftObjectPath);
+            auto& CURRENT_FILE_ID_57_GENERATED_BODY = self->CURRENT_FILE_ID_57_GENERATED_BODY;
+            LuaObject::push(L, CURRENT_FILE_ID_57_GENERATED_BODY);
+            return 1;
+        }
 
+        static int set_CURRENT_FILE_ID_57_GENERATED_BODY(lua_State* L) {
+            CheckSelf(FSoftObjectPath);
+            auto& CURRENT_FILE_ID_57_GENERATED_BODY = self->CURRENT_FILE_ID_57_GENERATED_BODY;
+            auto CURRENT_FILE_ID_57_GENERATED_BODYIn = LuaObject::checkValue<int>(L, 2);
+            CURRENT_FILE_ID_57_GENERATED_BODY = CURRENT_FILE_ID_57_GENERATED_BODYIn;
+            LuaObject::push(L, CURRENT_FILE_ID_57_GENERATED_BODYIn);
+            SLUA_MARK_NETPROP
+            return 1;
+        }
 
         static int ToString(lua_State* L) {
             {
@@ -1731,6 +1746,7 @@
             AutoStack autoStack(L);
             LuaObject::newType(L, "FSoftObjectPath");
             LuaObject::addOperator(L, "__eq", __eq);
+            LuaObject::addField(L, "CURRENT_FILE_ID_57_GENERATED_BODY", get_CURRENT_FILE_ID_57_GENERATED_BODY, set_CURRENT_FILE_ID_57_GENERATED_BODY, true);
             LuaObject::addMethod(L, "ToString", ToString, true);
             LuaObject::addMethod(L, "AppendString", AppendString, true);
             LuaObject::addMethod(L, "GetAssetPath", GetAssetPath, true);
@@ -1794,11 +1810,27 @@
             return 0;
         }
 
+        static int get_CURRENT_FILE_ID_540_GENERATED_BODY(lua_State* L) {
+            CheckSelf(FSoftClassPath);
+            auto& CURRENT_FILE_ID_540_GENERATED_BODY = self->CURRENT_FILE_ID_540_GENERATED_BODY;
+            LuaObject::push(L, CURRENT_FILE_ID_540_GENERATED_BODY);
+            return 1;
+        }
 
+        static int set_CURRENT_FILE_ID_540_GENERATED_BODY(lua_State* L) {
+            CheckSelf(FSoftClassPath);
+            auto& CURRENT_FILE_ID_540_GENERATED_BODY = self->CURRENT_FILE_ID_540_GENERATED_BODY;
+            auto CURRENT_FILE_ID_540_GENERATED_BODYIn = LuaObject::checkValue<int>(L, 2);
+            CURRENT_FILE_ID_540_GENERATED_BODY = CURRENT_FILE_ID_540_GENERATED_BODYIn;
+            LuaObject::push(L, CURRENT_FILE_ID_540_GENERATED_BODYIn);
+            SLUA_MARK_NETPROP
+            return 1;
+        }
 
         static void bind(lua_State* L) {
             AutoStack autoStack(L);
             LuaObject::newTypeWithBase(L, "FSoftClassPath", std::initializer_list<const char*>{ "FSoftObjectPath" });
+            LuaObject::addField(L, "CURRENT_FILE_ID_540_GENERATED_BODY", get_CURRENT_FILE_ID_540_GENERATED_BODY, set_CURRENT_FILE_ID_540_GENERATED_BODY, true);
             LuaObject::addMethod(L, "clone", clone, true);
             LuaObject::finishType(L, "FSoftClassPath", __ctor, __gc);
         }
@@ -1856,7 +1888,22 @@
             return 1;
         }
 
+        static int get_CURRENT_FILE_ID_29_GENERATED_BODY(lua_State* L) {
+            CheckSelf(FPrimaryAssetType);
+            auto& CURRENT_FILE_ID_29_GENERATED_BODY = self->CURRENT_FILE_ID_29_GENERATED_BODY;
+            LuaObject::push(L, CURRENT_FILE_ID_29_GENERATED_BODY);
+            return 1;
+        }
 
+        static int set_CURRENT_FILE_ID_29_GENERATED_BODY(lua_State* L) {
+            CheckSelf(FPrimaryAssetType);
+            auto& CURRENT_FILE_ID_29_GENERATED_BODY = self->CURRENT_FILE_ID_29_GENERATED_BODY;
+            auto CURRENT_FILE_ID_29_GENERATED_BODYIn = LuaObject::checkValue<int>(L, 2);
+            CURRENT_FILE_ID_29_GENERATED_BODY = CURRENT_FILE_ID_29_GENERATED_BODYIn;
+            LuaObject::push(L, CURRENT_FILE_ID_29_GENERATED_BODYIn);
+            SLUA_MARK_NETPROP
+            return 1;
+        }
 
         static int IsValid(lua_State* L) {
             {
@@ -1910,6 +1957,7 @@
             AutoStack autoStack(L);
             LuaObject::newType(L, "FPrimaryAssetType");
             LuaObject::addOperator(L, "__eq", __eq);
+            LuaObject::addField(L, "CURRENT_FILE_ID_29_GENERATED_BODY", get_CURRENT_FILE_ID_29_GENERATED_BODY, set_CURRENT_FILE_ID_29_GENERATED_BODY, true);
             LuaObject::addMethod(L, "IsValid", IsValid, true);
             LuaObject::addMethod(L, "ToString", ToString, true);
             LuaObject::addMethod(L, "LexicalLess", LexicalLess, true);
@@ -1970,7 +2018,22 @@
             return 1;
         }
 
+        static int get_CURRENT_FILE_ID_127_GENERATED_BODY(lua_State* L) {
+            CheckSelf(FPrimaryAssetId);
+            auto& CURRENT_FILE_ID_127_GENERATED_BODY = self->CURRENT_FILE_ID_127_GENERATED_BODY;
+            LuaObject::push(L, CURRENT_FILE_ID_127_GENERATED_BODY);
+            return 1;
+        }
 
+        static int set_CURRENT_FILE_ID_127_GENERATED_BODY(lua_State* L) {
+            CheckSelf(FPrimaryAssetId);
+            auto& CURRENT_FILE_ID_127_GENERATED_BODY = self->CURRENT_FILE_ID_127_GENERATED_BODY;
+            auto CURRENT_FILE_ID_127_GENERATED_BODYIn = LuaObject::checkValue<int>(L, 2);
+            CURRENT_FILE_ID_127_GENERATED_BODY = CURRENT_FILE_ID_127_GENERATED_BODYIn;
+            LuaObject::push(L, CURRENT_FILE_ID_127_GENERATED_BODYIn);
+            SLUA_MARK_NETPROP
+            return 1;
+        }
 
         static int get_PrimaryAssetType(lua_State* L) {
             CheckSelf(FPrimaryAssetId);
@@ -2061,6 +2124,7 @@
             AutoStack autoStack(L);
             LuaObject::newType(L, "FPrimaryAssetId");
             LuaObject::addOperator(L, "__eq", __eq);
+            LuaObject::addField(L, "CURRENT_FILE_ID_127_GENERATED_BODY", get_CURRENT_FILE_ID_127_GENERATED_BODY, set_CURRENT_FILE_ID_127_GENERATED_BODY, true);
             LuaObject::addField(L, "PrimaryAssetType", get_PrimaryAssetType, set_PrimaryAssetType, true);
             LuaObject::addMethod(L, "IsValid", IsValid, true);
             LuaObject::addMethod(L, "ToString", ToString, true);
@@ -2116,7 +2180,22 @@
             return 1;
         }
 
+        static int get_CURRENT_FILE_ID_39_GENERATED_BODY(lua_State* L) {
+            CheckSelf(FTopLevelAssetPath);
+            auto& CURRENT_FILE_ID_39_GENERATED_BODY = self->CURRENT_FILE_ID_39_GENERATED_BODY;
+            LuaObject::push(L, CURRENT_FILE_ID_39_GENERATED_BODY);
+            return 1;
+        }
 
+        static int set_CURRENT_FILE_ID_39_GENERATED_BODY(lua_State* L) {
+            CheckSelf(FTopLevelAssetPath);
+            auto& CURRENT_FILE_ID_39_GENERATED_BODY = self->CURRENT_FILE_ID_39_GENERATED_BODY;
+            auto CURRENT_FILE_ID_39_GENERATED_BODYIn = LuaObject::checkValue<int>(L, 2);
+            CURRENT_FILE_ID_39_GENERATED_BODY = CURRENT_FILE_ID_39_GENERATED_BODYIn;
+            LuaObject::push(L, CURRENT_FILE_ID_39_GENERATED_BODYIn);
+            SLUA_MARK_NETPROP
+            return 1;
+        }
 
         static int AppendString(lua_State* L) {
             {
@@ -2207,6 +2286,7 @@
             AutoStack autoStack(L);
             LuaObject::newType(L, "FTopLevelAssetPath");
             LuaObject::addOperator(L, "__eq", __eq);
+            LuaObject::addField(L, "CURRENT_FILE_ID_39_GENERATED_BODY", get_CURRENT_FILE_ID_39_GENERATED_BODY, set_CURRENT_FILE_ID_39_GENERATED_BODY, true);
             LuaObject::addMethod(L, "AppendString", AppendString, true);
             LuaObject::addMethod(L, "ToString", ToString, true);
             LuaObject::addMethod(L, "IsValid", IsValid, true);
