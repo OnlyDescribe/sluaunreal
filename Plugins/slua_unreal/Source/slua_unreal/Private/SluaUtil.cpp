@@ -40,11 +40,8 @@ namespace NS_SLUA {
         // if prefix is the unreal prefix
         if (tn[0] == 'F') {
             // if can find it by name in package
-#if ENGINE_MAJOR_VERSION==5 && ENGINE_MINOR_VERSION>0
-            UScriptStruct* ustruct = FindObject<UScriptStruct>((UPackage*)-1, UTF8_TO_TCHAR(tn+1));
-#else
-            UScriptStruct* ustruct = FindObject<UScriptStruct>(ANY_PACKAGE, UTF8_TO_TCHAR(tn+1));
-#endif
+            // UE5 removed ANY_PACKAGE; use FindFirstObject which searches across all packages.
+            UScriptStruct* ustruct = FindFirstObject<UScriptStruct>(UTF8_TO_TCHAR(tn+1), EFindFirstObjectOptions::NativeFirst);
             if (ustruct) {
                 if(out) *out = ustruct;
                 return true;

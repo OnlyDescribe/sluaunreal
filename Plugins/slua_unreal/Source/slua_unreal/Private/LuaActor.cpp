@@ -25,6 +25,10 @@ FString ALuaActor::GetLuaFilePath_Implementation() const
 void ALuaActor::PostInitializeComponents()
 {
     Super::PostInitializeComponents();
+    // Level-placed actors are deserialized before GameInstance::Init() creates LuaOverrider,
+    // so NotifyUObjectCreated auto-hook misses them. TryHook() here is safe: LuaState is
+    // guaranteed ready by PostInitializeComponents, and double-hook is guarded by isUFunctionHooked.
+    TryHook();
     ILuaOverriderInterface::PostLuaHook();
 }
 

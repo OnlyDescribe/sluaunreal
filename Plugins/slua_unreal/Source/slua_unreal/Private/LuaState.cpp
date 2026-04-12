@@ -199,31 +199,30 @@ namespace NS_SLUA {
                 }
             }
 
-#if ENGINE_MAJOR_VERSION==5 && ENGINE_MINOR_VERSION>0
-            static UPackage* AnyPackage = (UPackage*)-1;
-#else
-            static UPackage* AnyPackage = ANY_PACKAGE;
-#endif
+            // UE5 removed ANY_PACKAGE; FindObject(nullptr, ...) only matches top-level objects (no outer).
+            // Use FindFirstObject which searches across all packages — the correct UE5 replacement for ANY_PACKAGE.
             FString path = UTF8_TO_TCHAR(name);
-            if (!FindObject<UObject>(AnyPackage, *path)) {
-                // Try to load object if not found!
-                LoadObject<UObject>(NULL, *path);
-            }
 
-            UClass* uclass = FindObject<UClass>(AnyPackage, *path);
+            UClass* uclass = FindFirstObject<UClass>(*path, EFindFirstObjectOptions::NativeFirst);
+            if (!uclass) {
+                // Try to load then retry (handles asset-based classes not yet in memory)
+                LoadObject<UObject>(NULL, *path);
+                uclass = FindFirstObject<UClass>(*path, EFindFirstObjectOptions::NativeFirst);
+            }
             if (uclass) {
                 LuaObject::pushClass(L, uclass);
                 state->cacheImportedMap.Add(name, ImportedObjectCache {uclass, ImportedClass});
                 return 1;
             }
-            UScriptStruct* ustruct = FindObject<UScriptStruct>(AnyPackage, *path);
+
+            UScriptStruct* ustruct = FindFirstObject<UScriptStruct>(*path, EFindFirstObjectOptions::NativeFirst);
             if (ustruct) {
                 LuaObject::pushStruct(L, ustruct);
                 state->cacheImportedMap.Add(name, ImportedObjectCache {ustruct, ImportedStruct});
                 return 1;
             }
 
-            UEnum* uenum = FindObject<UEnum>(AnyPackage, *path);
+            UEnum* uenum = FindFirstObject<UEnum>(*path, EFindFirstObjectOptions::NativeFirst);
             if (uenum) {
                 LuaObject::pushEnum(L, uenum);
                 state->cacheImportedMap.Add(name, ImportedObjectCache{ uenum, ImportedEnum });
