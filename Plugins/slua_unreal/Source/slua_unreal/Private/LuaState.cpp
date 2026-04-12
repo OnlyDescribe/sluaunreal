@@ -120,7 +120,7 @@ namespace NS_SLUA {
     void LuaState::decreaseCallStack()
     {
         currentCallStack--;
-        newObjectsInCallStack.Pop(false);
+        newObjectsInCallStack.Pop(EAllowShrinking::No);
     }
 
     bool LuaState::hasObjectInStack(const UObject* obj, int stackLayer)
@@ -705,7 +705,7 @@ namespace NS_SLUA {
 #if (ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4)
         propList.RemoveSwap(propud);
 #else
-        propList.RemoveSwap(propud, false);
+        propList.RemoveSwap(propud, EAllowShrinking::No);
 #endif
     }
 

@@ -869,7 +869,7 @@ namespace NS_SLUA {
         UObject* obj;
         int offset=1;
         // use ClassDefaultObject if is static function call 
-        if(cls) obj = cls->ClassDefaultObject;
+        if(cls) obj = cls->GetDefaultObject();
         // use obj instance if is member function call
         // and offset set 2 to skip self
         else {

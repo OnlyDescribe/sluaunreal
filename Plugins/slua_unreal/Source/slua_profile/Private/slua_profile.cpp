@@ -162,7 +162,7 @@ Flua_profileCommands::Flua_profileCommands()
 
 void Flua_profileCommands::RegisterCommands()
 {
-    UI_COMMAND(OpenPluginWindow, "slua Profile", "Open slua Profile tool", EUserInterfaceActionType::Button, FInputGesture());
+    UI_COMMAND(OpenPluginWindow, "slua Profile", "Open slua Profile tool", EUserInterfaceActionType::Button, FInputChord());
 }
 #endif
 

@@ -1,4 +1,4 @@
-﻿// Tencent is pleased to support the open source community by making sluaunreal available.
+// Tencent is pleased to support the open source community by making sluaunreal available.
 
 // Copyright (C) 2018 THL A29 Limited, a Tencent company. All rights reserved.
 // Licensed under the BSD 3-Clause License (the "License"); 
@@ -108,10 +108,10 @@ namespace NS_SLUA {
         // Cast FScriptMap to TMap<TKey, TValue> if ElementSize matched
         template<typename TKey, typename TValue>
         const TMap<TKey, TValue>& asTMap(lua_State* L) const {
-            if (sizeof(TKey) != keyProp->ElementSize)
-                luaL_error(L, "Cast to TMap error, key element size isn't mathed(%d,%d)", sizeof(TKey), keyProp->ElementSize);
-            if (sizeof(TValue) != valueProp->ElementSize)
-                luaL_error(L, "Cast to TMap error, value element size isn't mathed(%d,%d)", sizeof(TValue), valueProp->ElementSize);
+            if (sizeof(TKey) != keyProp->GetElementSize())
+                luaL_error(L, "Cast to TMap error, key element size isn't mathed(%d,%d)", sizeof(TKey), keyProp->GetElementSize());
+            if (sizeof(TValue) != valueProp->GetElementSize())
+                luaL_error(L, "Cast to TMap error, value element size isn't mathed(%d,%d)", sizeof(TValue), valueProp->GetElementSize());
 
             // modified FScriptMap::CheckConstraints function to check type constraints
             typedef FScriptMap ScriptType;

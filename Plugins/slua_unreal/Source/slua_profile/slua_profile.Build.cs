@@ -27,7 +27,7 @@ public class slua_profile : ModuleRules
 #else
         bEnforceIWYU = false;
 #endif
-        bEnableUndefinedIdentifierWarnings = false;
+        CppCompileWarningSettings.UndefinedIdentifierWarningLevel = WarningLevel.Off;
 
         PrivateDependencyModuleNames.AddRange(new string[] { "slua_unreal" });
         PublicIncludePathModuleNames.AddRange(new string[] { "slua_unreal" });

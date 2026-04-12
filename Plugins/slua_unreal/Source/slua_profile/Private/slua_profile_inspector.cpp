@@ -20,6 +20,7 @@
 #include "Delegates/IDelegateInstance.h"
 #include "Internationalization/Regex.h"
 #include "Fonts/SlateFontInfo.h"
+#include "Styling/CoreStyle.h"
 #include "Math/Vector2D.h"
 #include "Math/Color.h"
 #include "LuaProfiler.h"
@@ -41,7 +42,7 @@
 #include "Misc/Paths.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SSlider.h"
-#include "Stats/Stats2.h"
+#include "Stats/Stats.h"
 #include "Developer/DesktopPlatform/Public/DesktopPlatformModule.h"
 #include "SluaProfilerDataManager.h"
 #include "Runtime/Launch/Resources/Version.h"
@@ -584,7 +585,6 @@ TSharedRef<class SDockTab>  SProfilerInspector::GetSDockTab()
 
     // init tree view
     SAssignNew(treeview, STreeView<TSharedPtr<FunctionProfileNode>>)
-    .ItemHeight(800)
     .TreeItemsSource(&profileRootArr)
     .OnGenerateRow_Raw(this, &SProfilerInspector::OnGenerateRowForList)
     .OnGetChildren_Raw(this, &SProfilerInspector::OnGetChildrenForTree)
@@ -636,7 +636,6 @@ TSharedRef<class SDockTab>  SProfilerInspector::GetSDockTab()
     );
     
     SAssignNew(memTreeView, STreeView<TSharedPtr<FileMemInfo>>)
-    .ItemHeight(800)
     .TreeItemsSource(&shownParentFileName)
     .OnGenerateRow_Raw(this, &SProfilerInspector::OnGenerateMemRowForList)
     .OnGetChildren_Raw(this, &SProfilerInspector::OnGetMemChildrenForTree)
@@ -1368,7 +1367,7 @@ void SProfilerInspector::CombineSameFileInfo(FProflierMemNode& proflierMemNode, 
 
     if (shownParentFileName.Num() > maxMemoryFile)
     {
-        shownParentFileName.RemoveAt(maxMemoryFile, shownParentFileName.Num() - maxMemoryFile, false);
+        shownParentFileName.RemoveAt(maxMemoryFile, shownParentFileName.Num() - maxMemoryFile, EAllowShrinking::No);
     }
 }
 
@@ -1964,7 +1963,7 @@ void SProfilerTabWidget::Construct(const FArguments& InArgs)
                     .Padding(15.0f, 15.0f)
                     [
                         SNew(STextBlock)
-                        .Font(FSlateFontInfo(FPaths::EngineContentDir() / TEXT("Slate/Fonts/Roboto-Bold.ttf"), 13))
+                        .Font(FCoreStyle::GetDefaultFontStyle("Bold", 13))
                         .ColorAndOpacity(FLinearColor(1, 1, 1, 0.5))
                         .Text(InArgs._TabName)
                     ]
