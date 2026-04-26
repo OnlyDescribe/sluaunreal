@@ -31,6 +31,12 @@ public class slua_unreal : ModuleRules
         var externalSource = Path.Combine(PluginDirectory, "External");
         var externalLib = Path.Combine(PluginDirectory, "Library");
 
+        if (Target.Platform == UnrealTargetPlatform.Win64)
+        {
+            PublicDefinitions.Add("LUA_BUILD_AS_DLL=1");
+            PrivateDefinitions.Add("LUA_CORE=1");
+        }
+
         PublicIncludePaths.AddRange(
             new string[] {
                 externalSource,

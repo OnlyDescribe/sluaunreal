@@ -243,9 +243,21 @@
 */
 #if defined(LUA_BUILD_AS_DLL)	/* { */
 #if defined(LUA_CORE) || defined(LUA_LIB)	/* { */
+#if defined(_WIN32) && defined(__cplusplus)
+#define LUA_API extern "C" __declspec(dllexport)
+#elif defined(_WIN32)
 #define LUA_API __declspec(dllexport)
+#else
+#define LUA_API extern
+#endif
 #else						/* }{ */
+#if defined(_WIN32) && defined(__cplusplus)
+#define LUA_API extern "C" __declspec(dllimport)
+#elif defined(_WIN32)
 #define LUA_API __declspec(dllimport)
+#else
+#define LUA_API extern
+#endif
 #endif						/* } */
 
 #else				/* }{ */
@@ -253,11 +265,6 @@
 #define LUA_API		extern
 
 #endif				/* } */
-
-#if defined(_WIN32)
-#undef LUA_API
-#define LUA_API extern "C" __declspec(dllexport)
-#endif
 
 /* more often than not the libs go together with the core */
 #define LUALIB_API	LUA_API
