@@ -846,7 +846,7 @@ namespace NS_SLUA
                     // func hooked by insert code
                     if (scriptNum >= CodeSize && script[0] == Ex_LuaOverride)
                     {
-                        script.RemoveAt(0, CodeSize, EAllowShrinking::No);
+                        script.RemoveAt(0, CodeSize, SLUA_ALLOW_SHRINKING_NO);
                         if (script.Num() == 0)
                         {
                             // Fixed crash: avoid FFrame Construct initialize with "Code(InNode->Script.GetData())" error assign with not null data while play twice in editor!
@@ -1008,7 +1008,7 @@ namespace NS_SLUA
             }
             curIndex++;
         }
-        asyncLoadedObjects.RemoveAt(newIndex, asyncLoadedObjects.Num() - newIndex, EAllowShrinking::No);
+        asyncLoadedObjects.RemoveAt(newIndex, asyncLoadedObjects.Num() - newIndex, SLUA_ALLOW_SHRINKING_NO);
 
         bOnAsyncLoadingFlushUpdate = false;
     }

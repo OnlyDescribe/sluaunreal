@@ -120,7 +120,7 @@ namespace NS_SLUA {
     void LuaState::decreaseCallStack()
     {
         currentCallStack--;
-        newObjectsInCallStack.Pop(EAllowShrinking::No);
+        newObjectsInCallStack.Pop(SLUA_ALLOW_SHRINKING_NO);
     }
 
     bool LuaState::hasObjectInStack(const UObject* obj, int stackLayer)
@@ -199,10 +199,11 @@ namespace NS_SLUA {
                 }
             }
 
-            // UE5 removed ANY_PACKAGE; FindObject(nullptr, ...) only matches top-level objects (no outer).
-            // Use FindFirstObject which searches across all packages — the correct UE5 replacement for ANY_PACKAGE.
             FString path = UTF8_TO_TCHAR(name);
 
+#if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
+            // UE 5.7 removed ANY_PACKAGE-compatible search paths. FindFirstObject
+            // searches across loaded packages and preserves the old import semantics.
             UClass* uclass = FindFirstObject<UClass>(*path, EFindFirstObjectOptions::NativeFirst);
             if (!uclass) {
                 // Try to load then retry (handles asset-based classes not yet in memory)
@@ -228,6 +229,37 @@ namespace NS_SLUA {
                 state->cacheImportedMap.Add(name, ImportedObjectCache{ uenum, ImportedEnum });
                 return 1;
             }
+#else
+#if ENGINE_MAJOR_VERSION==5 && ENGINE_MINOR_VERSION>0
+            static UPackage* AnyPackage = (UPackage*)-1;
+#else
+            static UPackage* AnyPackage = ANY_PACKAGE;
+#endif
+            if (!FindObject<UObject>(AnyPackage, *path)) {
+                // Try to load object if not found!
+                LoadObject<UObject>(NULL, *path);
+            }
+
+            UClass* uclass = FindObject<UClass>(AnyPackage, *path);
+            if (uclass) {
+                LuaObject::pushClass(L, uclass);
+                state->cacheImportedMap.Add(name, ImportedObjectCache {uclass, ImportedClass});
+                return 1;
+            }
+            UScriptStruct* ustruct = FindObject<UScriptStruct>(AnyPackage, *path);
+            if (ustruct) {
+                LuaObject::pushStruct(L, ustruct);
+                state->cacheImportedMap.Add(name, ImportedObjectCache {ustruct, ImportedStruct});
+                return 1;
+            }
+
+            UEnum* uenum = FindObject<UEnum>(AnyPackage, *path);
+            if (uenum) {
+                LuaObject::pushEnum(L, uenum);
+                state->cacheImportedMap.Add(name, ImportedObjectCache{ uenum, ImportedEnum });
+                return 1;
+            }
+#endif
 
             luaL_error(L, "Can't find class named %s", name);
         }
@@ -704,7 +736,7 @@ namespace NS_SLUA {
 #if (ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4)
         propList.RemoveSwap(propud);
 #else
-        propList.RemoveSwap(propud, EAllowShrinking::No);
+        propList.RemoveSwap(propud, SLUA_ALLOW_SHRINKING_NO);
 #endif
     }
 

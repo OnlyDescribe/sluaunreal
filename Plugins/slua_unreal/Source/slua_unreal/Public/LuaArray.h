@@ -64,8 +64,8 @@ namespace NS_SLUA {
         // Cast FScriptArray to TArray<T> if ElementSize matched
         template<typename T>
         const TArray<T>& asTArray(lua_State* L) const {
-            if(sizeof(T)!=inner->GetElementSize())
-                luaL_error(L,"Cast to TArray error, element size isn't mathed(%d,%d)",sizeof(T),inner->GetElementSize());
+            if(sizeof(T)!=GetPropertyElementSize(inner))
+                luaL_error(L,"Cast to TArray error, element size isn't mathed(%d,%d)",sizeof(T),GetPropertyElementSize(inner));
             return *(reinterpret_cast<const TArray<T>*>( array ));
         }
 

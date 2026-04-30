@@ -108,10 +108,10 @@ namespace NS_SLUA {
         // Cast FScriptMap to TMap<TKey, TValue> if ElementSize matched
         template<typename TKey, typename TValue>
         const TMap<TKey, TValue>& asTMap(lua_State* L) const {
-            if (sizeof(TKey) != keyProp->GetElementSize())
-                luaL_error(L, "Cast to TMap error, key element size isn't mathed(%d,%d)", sizeof(TKey), keyProp->GetElementSize());
-            if (sizeof(TValue) != valueProp->GetElementSize())
-                luaL_error(L, "Cast to TMap error, value element size isn't mathed(%d,%d)", sizeof(TValue), valueProp->GetElementSize());
+            if (sizeof(TKey) != GetPropertyElementSize(keyProp))
+                luaL_error(L, "Cast to TMap error, key element size isn't mathed(%d,%d)", sizeof(TKey), GetPropertyElementSize(keyProp));
+            if (sizeof(TValue) != GetPropertyElementSize(valueProp))
+                luaL_error(L, "Cast to TMap error, value element size isn't mathed(%d,%d)", sizeof(TValue), GetPropertyElementSize(valueProp));
 
             // modified FScriptMap::CheckConstraints function to check type constraints
             typedef FScriptMap ScriptType;

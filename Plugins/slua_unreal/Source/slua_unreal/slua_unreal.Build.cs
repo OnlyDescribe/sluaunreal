@@ -26,15 +26,24 @@ public class slua_unreal : ModuleRules
 #else
         bEnforceIWYU = false;
 #endif
+#if UE_5_7_OR_LATER
         CppCompileWarningSettings.UndefinedIdentifierWarningLevel = WarningLevel.Off;
+#else
+        bEnableUndefinedIdentifierWarnings = false;
+#endif
 
         var externalSource = Path.Combine(PluginDirectory, "External");
         var externalLib = Path.Combine(PluginDirectory, "Library");
 
         if (Target.Platform == UnrealTargetPlatform.Win64)
         {
+#if UE_4_21_OR_LATER
             PublicDefinitions.Add("LUA_BUILD_AS_DLL=1");
             PrivateDefinitions.Add("LUA_CORE=1");
+#else
+            Definitions.Add("LUA_BUILD_AS_DLL=1");
+            Definitions.Add("LUA_CORE=1");
+#endif
         }
 
         PublicIncludePaths.AddRange(

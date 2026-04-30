@@ -37,7 +37,12 @@
 
 #include "LuaProfiler.inl"
 #include "SluaUtil.h"
+#include "Runtime/Launch/Resources/Version.h"
+#if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
 #include "Stats/Stats.h"
+#else
+#include "Stats/Stats2.h"
+#endif
 
 #if (ENGINE_MINOR_VERSION>=3) && (ENGINE_MAJOR_VERSION==5)
 #ifdef max

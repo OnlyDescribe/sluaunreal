@@ -26,6 +26,7 @@
 #include "slua_remote_profile.h"
 #include "ProfileDataDefine.h"
 #include "SluaProfilerDataManager.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 DEFINE_LOG_CATEGORY(LogSluaProfile)
 #define LOCTEXT_NAMESPACE "Fslua_profileModule"
@@ -162,7 +163,11 @@ Flua_profileCommands::Flua_profileCommands()
 
 void Flua_profileCommands::RegisterCommands()
 {
+#if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
     UI_COMMAND(OpenPluginWindow, "slua Profile", "Open slua Profile tool", EUserInterfaceActionType::Button, FInputChord());
+#else
+    UI_COMMAND(OpenPluginWindow, "slua Profile", "Open slua Profile tool", EUserInterfaceActionType::Button, FInputGesture());
+#endif
 }
 #endif
 

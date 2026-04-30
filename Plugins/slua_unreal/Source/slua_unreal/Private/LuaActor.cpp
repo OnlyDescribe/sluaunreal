@@ -1,6 +1,7 @@
 #include "LuaActor.h"
 #include "LuaState.h"
 #include "Net/UnrealNetwork.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 ALuaActor::ALuaActor(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -25,10 +26,12 @@ FString ALuaActor::GetLuaFilePath_Implementation() const
 void ALuaActor::PostInitializeComponents()
 {
     Super::PostInitializeComponents();
+#if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
     // Level-placed actors are deserialized before GameInstance::Init() creates LuaOverrider,
     // so NotifyUObjectCreated auto-hook misses them. TryHook() here is safe: LuaState is
     // guaranteed ready by PostInitializeComponents, and double-hook is guarded by isUFunctionHooked.
     TryHook();
+#endif
     ILuaOverriderInterface::PostLuaHook();
 }
 

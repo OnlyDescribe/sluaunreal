@@ -77,8 +77,8 @@ namespace NS_SLUA {
         template<typename T>
         const TSet<T>& asTSet(lua_State* L) const
         {
-            if (sizeof(T) != inner->GetElementSize())
-                luaL_error(L, "Cast to TSet error, element size doesn't match (%d, %d)", sizeof(T), inner->GetElementSize());
+            if (sizeof(T) != GetPropertyElementSize(inner))
+                luaL_error(L, "Cast to TSet error, element size doesn't match (%d, %d)", sizeof(T), GetPropertyElementSize(inner));
             return *(reinterpret_cast<const TSet<T>*>(set));
         }
         
