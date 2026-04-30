@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.10)
 
 set(CMAKE_BUILD_TYPE Debug)
 
@@ -121,3 +121,16 @@ add_library(lua STATIC
     ${LUA_SRC_FILES}
     ${THIRDPART_SRC_FILES}
 )
+
+add_executable(lua_cli
+    ${LUA_SRC_PATH}/lua.cpp
+)
+target_link_libraries(lua_cli lua)
+set_target_properties(lua_cli PROPERTIES
+    OUTPUT_NAME lua
+    PDB_NAME lua_cli
+)
+
+if(UNIX)
+    target_link_libraries(lua_cli m ${CMAKE_DL_LIBS})
+endif()
