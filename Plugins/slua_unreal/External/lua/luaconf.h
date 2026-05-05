@@ -241,8 +241,25 @@
 ** the libraries, you may want to use the following definition (define
 ** LUA_BUILD_AS_DLL to get it).
 */
-#if defined(LUA_BUILD_AS_DLL)	/* { */
-#if defined(LUA_CORE) || defined(LUA_LIB)	/* { */
+/*
+** LUA_STATIC_LINK is set by the CMake build (lua static archive + lua_cli)
+** and MUST take priority over LUA_BUILD_AS_DLL: when both are defined we
+** want lua.lib / lua_cli to expose Lua's C API as plain `extern` symbols,
+** with no dllexport / dllimport attributes baked in. The slua_unreal UE
+** module compiles with only LUA_BUILD_AS_DLL (+ private LUA_CORE) and
+** re-exports those plain symbols from slua_unreal.dll explicitly via
+** Source/slua_unreal/Private/LuaExports.cpp (linker /EXPORT pragmas).
+*/
+#if defined(LUA_STATIC_LINK) /* { */
+#if defined(_WIN32) && defined(__cplusplus)
+#define LUA_API extern "C"
+#elif defined(_WIN32)
+#define LUA_API extern
+#else
+#define LUA_API extern
+#endif
+#elif defined(LUA_BUILD_AS_DLL)           /* }{ */
+#if defined(LUA_CORE) || defined(LUA_LIB) /* { */
 #if defined(_WIN32) && defined(__cplusplus)
 #define LUA_API extern "C" __declspec(dllexport)
 #elif defined(_WIN32)
@@ -250,7 +267,7 @@
 #else
 #define LUA_API extern
 #endif
-#else						/* }{ */
+#else /* }{ */
 #if defined(_WIN32) && defined(__cplusplus)
 #define LUA_API extern "C" __declspec(dllimport)
 #elif defined(_WIN32)
@@ -258,7 +275,7 @@
 #else
 #define LUA_API extern
 #endif
-#endif						/* } */
+#endif /* } */
 
 #else				/* }{ */
 

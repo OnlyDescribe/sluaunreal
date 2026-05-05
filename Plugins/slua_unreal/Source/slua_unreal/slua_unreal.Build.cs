@@ -33,11 +33,12 @@ public class slua_unreal : ModuleRules
 #endif
 
         var externalSource = Path.Combine(PluginDirectory, "External");
-        var externalLib = Path.Combine(PluginDirectory, "Library");
 
         if (Target.Platform == UnrealTargetPlatform.Win64)
         {
 #if UE_4_21_OR_LATER
+            // PublicDefinitions / PrivateDefinitions only exist on UE 4.21+.
+            // Older engines must fall back to the unified Definitions list.
             PublicDefinitions.Add("LUA_BUILD_AS_DLL=1");
             PrivateDefinitions.Add("LUA_CORE=1");
 #else
@@ -53,36 +54,6 @@ public class slua_unreal : ModuleRules
                 // ... add public include paths required here ...
             }
             );
-
-        if (Target.Platform == UnrealTargetPlatform.IOS)
-        {
-            PublicAdditionalLibraries.Add(Path.Combine(externalLib, "iOS/liblua.a"));
-        }
-        else if (Target.Platform == UnrealTargetPlatform.Android)
-        {
-#if UE_4_24_OR_LATER
-            PublicAdditionalLibraries.Add(Path.Combine(externalLib, "Android/armeabi-v7a/liblua.a"));
-            PublicAdditionalLibraries.Add(Path.Combine(externalLib, "Android/armeabi-arm64/liblua.a"));
-            PublicAdditionalLibraries.Add(Path.Combine(externalLib, "Android/x86/liblua.a"));
-#else
-            PublicLibraryPaths.Add(Path.Combine(externalLib, "Android/armeabi-arm64"));
-            PublicLibraryPaths.Add(Path.Combine(externalLib, "Android/armeabi-v7a"));
-            PublicLibraryPaths.Add(Path.Combine(externalLib, "Android/x86"));
-            PublicAdditionalLibraries.Add("lua");
-#endif
-        }
-        else if (Target.Platform == UnrealTargetPlatform.Win64)
-        {
-            PublicAdditionalLibraries.Add(Path.Combine(externalLib, "Win64/lua.lib"));
-        }
-        else if (Target.Platform == UnrealTargetPlatform.Mac)
-        {
-            PublicAdditionalLibraries.Add(Path.Combine(externalLib, "Mac/liblua.a"));
-        }
-        else if (Target.Platform == UnrealTargetPlatform.Linux)
-        {
-            PublicAdditionalLibraries.Add(Path.Combine(externalLib, "Linux/liblua.a"));
-        }
 
         PublicDependencyModuleNames.AddRange(
             new string[]
@@ -108,6 +79,8 @@ public class slua_unreal : ModuleRules
                 "UMG",
                 "InputCore",
                 "NetCore",
+                // Keep lua.lib private so game modules import Lua through slua_unreal.dll.
+                "slua_lua",
                 // ... add private dependencies that you statically link with here ...
             }
             );

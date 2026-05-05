@@ -1,6 +1,7 @@
 import re, shutil, os
 
-base = r'K:\Project\Key\Plugins\sluaunreal\Plugins\slua_unreal\Source\slua_unreal'
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+base = os.path.normpath(os.path.join(SCRIPT_DIR, '..', 'Plugins', 'slua_unreal', 'Source', 'slua_unreal'))
 inc = os.path.join(base, 'Private', 'LuaWrapper.inc')
 head = os.path.join(base, 'Public', 'LuaWrapperHead.inc')
 inc57 = os.path.join(base, 'Private', 'LuaWrapper5.7.inc')

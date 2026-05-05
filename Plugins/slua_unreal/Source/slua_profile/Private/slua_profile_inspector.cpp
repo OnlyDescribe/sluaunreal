@@ -43,12 +43,11 @@
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SSlider.h"
 #include "Runtime/Launch/Resources/Version.h"
+#include "SluaMicro.h"
 #if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
 #include "Stats/Stats.h"
-#define SLUA_PROFILE_ALLOW_SHRINKING_NO EAllowShrinking::No
 #else
 #include "Stats/Stats2.h"
-#define SLUA_PROFILE_ALLOW_SHRINKING_NO false
 #endif
 #include "Developer/DesktopPlatform/Public/DesktopPlatformModule.h"
 #include "SluaProfilerDataManager.h"
@@ -1379,7 +1378,7 @@ void SProfilerInspector::CombineSameFileInfo(FProflierMemNode& proflierMemNode, 
 
     if (shownParentFileName.Num() > maxMemoryFile)
     {
-        shownParentFileName.RemoveAt(maxMemoryFile, shownParentFileName.Num() - maxMemoryFile, SLUA_PROFILE_ALLOW_SHRINKING_NO);
+        shownParentFileName.RemoveAt(maxMemoryFile, shownParentFileName.Num() - maxMemoryFile, SLUA_ALLOW_SHRINKING_NO);
     }
 }
 
