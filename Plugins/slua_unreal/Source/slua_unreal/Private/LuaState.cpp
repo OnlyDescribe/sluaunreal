@@ -588,12 +588,7 @@ namespace NS_SLUA {
 
         // use custom memory alloc func to profile memory footprint
 #if ENABLE_PROFILER && !UE_BUILD_SHIPPING
-#if WITH_EDITOR
-        // EmmyLua native attach observes luaL_newstate in editor processes.
-        L = luaL_newstate();
-#else
         L = lua_newstate(LuaMemoryProfile::alloc,this);
-#endif
 #else
         L = luaL_newstate();
 #endif
