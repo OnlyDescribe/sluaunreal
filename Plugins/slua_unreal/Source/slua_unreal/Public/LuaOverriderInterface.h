@@ -26,6 +26,7 @@ public:
     virtual void PostLuaHook();
 
     void TryHook();
+    bool TryHook(NS_SLUA::LuaState* LuaState);
 
     NS_SLUA::LuaVar GetCachedLuaFunc(NS_SLUA::lua_State* L, const NS_SLUA::LuaVar selfTable, const FString& FunctionName) {
 #if WITH_EDITOR

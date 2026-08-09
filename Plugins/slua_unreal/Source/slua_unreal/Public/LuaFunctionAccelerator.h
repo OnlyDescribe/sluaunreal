@@ -28,6 +28,11 @@ namespace NS_SLUA {
 
         int call(lua_State* L, int offset, UObject* obj, bool& isLatentFunction, NewObjectRecorder* objRecorder);
 
+#if WITH_DEV_AUTOMATION_TESTS
+        static bool runFunctionLocalLifetimeProbeForTests(
+            lua_State* L, bool bForceLuaError, int32& outInitializedCount, int32& outDestroyedCount);
+#endif
+
         void fillParam(lua_State* L, int i, NewObjectRecorder* objRecorder, const PostFillParamCallback& callback, bool &isLatentFunction);
         int returnValue(lua_State* L, int i, uint8* params, PTRINT* outParams, NewObjectRecorder* objRecorder);
 
@@ -44,26 +49,106 @@ namespace NS_SLUA {
                 : propertyList(propertys)
                   , paramAddress(params)
                   , paramsMax(numParams)
+                  , bDestroyed(false)
             {
             }
 
             ~AutoDestructor()
             {
-                if (propertyList)
+                Destroy();
+            }
+
+            void Destroy()
+            {
+                if (!bDestroyed && propertyList)
                 {
-                    uint16 paramIndex = 0;
-                    for (FProperty* it = *propertyList; it && paramIndex < paramsMax; it = *(++propertyList), ++
-                         paramIndex)
+                    for (uint16 paramIndex = 0; paramIndex < paramsMax; ++paramIndex)
                     {
-                        it->DestroyValue_InContainer(paramAddress);
+                        FProperty* property = propertyList[paramIndex];
+                        if (!property)
+                        {
+                            break;
+                        }
+                        property->DestroyValue_InContainer(paramAddress);
                     }
                 }
+                bDestroyed = true;
             }
 
             FProperty** propertyList;
             uint8* paramAddress;
             uint16 paramsMax;
+            bool bDestroyed;
         };
+
+        struct AutoLocalDestructor
+        {
+            AutoLocalDestructor(UFunction* inFunction, uint8* inLocals)
+                : function(inFunction)
+                , locals(inLocals)
+                  , bInitialized(false)
+                  , bDestroyed(false)
+#if WITH_DEV_AUTOMATION_TESTS
+                  , initializedCount(0)
+                  , destroyedCount(0)
+#endif
+            {
+            }
+
+            ~AutoLocalDestructor()
+            {
+                Destroy();
+            }
+
+            void Initialize()
+            {
+                for (FProperty* property = function->FirstPropertyToInit; property;
+                     property = property->PostConstructLinkNext)
+                {
+                    if (!property->IsInContainer(function->ParmsSize))
+                    {
+                        property->InitializeValue_InContainer(locals);
+#if WITH_DEV_AUTOMATION_TESTS
+                        ++initializedCount;
+#endif
+                    }
+                }
+                bInitialized = true;
+            }
+
+            void Destroy()
+            {
+                if (bInitialized && !bDestroyed)
+                {
+                    for (FProperty* property = function->DestructorLink; property;
+                         property = property->DestructorLinkNext)
+                    {
+                        if (!property->IsInContainer(function->ParmsSize))
+                        {
+                        property->DestroyValue_InContainer(locals);
+#if WITH_DEV_AUTOMATION_TESTS
+                        ++destroyedCount;
+#endif
+                        }
+                    }
+                }
+                bDestroyed = true;
+            }
+
+            UFunction* function;
+            uint8* locals;
+            bool bInitialized;
+            bool bDestroyed;
+#if WITH_DEV_AUTOMATION_TESTS
+            int32 initializedCount;
+            int32 destroyedCount;
+#endif
+        };
+
+        struct FProtectedCallContext;
+        static int protectedFillParams(lua_State* L);
+        static int protectedInvoke(lua_State* L);
+        static int protectedPushResults(lua_State* L);
 
         bool bNativeFunc;
         
@@ -97,6 +182,11 @@ namespace NS_SLUA {
         bool bHasReturnParam;
         FPusherInfo returnPusherInfo;
         TArray<FPusherInfo> outPropsPusher;
+
+#if WITH_DEV_AUTOMATION_TESTS
+        int32 lastLocalInitializedCount = 0;
+        int32 lastLocalDestroyedCount = 0;
+#endif
     };
     
 }

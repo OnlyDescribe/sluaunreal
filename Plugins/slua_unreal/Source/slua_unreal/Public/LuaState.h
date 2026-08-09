@@ -100,7 +100,7 @@ namespace NS_SLUA {
         , public FTickableGameObject
     {
     public:
-        LuaState(const char* name=nullptr,UGameInstance* pGI=nullptr);
+        LuaState(const char* name=nullptr, UGameInstance* pGI=nullptr, bool bInPrimaryEligible=true);
         virtual ~LuaState();
 
         /*
@@ -137,6 +137,8 @@ namespace NS_SLUA {
         
         // return state index
         int stateIndex() const { return si; }
+
+        bool isClosingOrClosed() const { return bClosing || bClosed; }
         
         // init lua state
         virtual bool init();
@@ -244,6 +246,14 @@ namespace NS_SLUA {
         void cleanupThreads();
         ULatentDelegate* getLatentDelegate() const;
 
+#if WITH_DEV_AUTOMATION_TESTS
+        static int32 getRegisteredStateCountForTests();
+        static LuaState* getPrimaryStateForTests();
+        int32 getDeferredStructCountForTests() const { return deferGCStruct.Num(); }
+        int32 getThreadCountForTests() const { return threadToRef.Num(); }
+        static void invokeLatentCallbackForTests(ULatentDelegate* Delegate, int32 ThreadRef);
+#endif
+
         // call this function on script error
         void onError(const char* err);
         
@@ -298,6 +308,9 @@ namespace NS_SLUA {
         void releaseAllLink();
         void linkProp(void* parentAddress, void* prop);
         void unlinkProp(void* prop);
+        void drainDeferredStructs();
+        bool releaseThreadRef(int threadRef, lua_State* expectedThread = nullptr);
+        static void refreshPrimaryState();
         // unreal gc will call this funciton
         void onEngineGC();
         // on world cleanup
@@ -372,6 +385,13 @@ namespace NS_SLUA {
         TArray<ObjectSet> newObjectsInCallStack;
 
         TArray<struct LuaStruct*> deferGCStruct;
+        bool bPrimaryEligible;
+        bool bRegistered;
+        bool bClosing;
+        bool bClosed;
+        bool bUObjectListenersRegistered;
+        bool bLifecycleDelegatesRegistered;
+        int32 closingDirectStructDeleteCount;
 
 #if UE_BUILD_DEVELOPMENT
         bool bRefTraceEnable;

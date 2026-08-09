@@ -455,12 +455,22 @@ namespace NS_SLUA {
 
     void garbageCollect() {
         auto state = LuaState::get();
+        if (!state)
+        {
+            UE_LOG(Slua, Warning, TEXT("slua.GC requires exactly one eligible LuaState"));
+            return;
+        }
         lua_gc(state->getLuaState(), LUA_GCCOLLECT, 0);
         UE_LOG(Slua, Log, TEXT("Performed full lua gc"));
     }
 
     void memUsed() {
         auto state = LuaState::get();
+        if (!state)
+        {
+            UE_LOG(Slua, Warning, TEXT("slua.Mem requires exactly one eligible LuaState"));
+            return;
+        }
         int kb = lua_gc(state->getLuaState(), LUA_GCCOUNT, 0);
         UE_LOG(Slua, Log, TEXT("Lua use memory %d kb"), kb);
     }

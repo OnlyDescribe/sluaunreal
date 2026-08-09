@@ -1,4 +1,5 @@
 #include "LuaActorComponent.h"
+#include "LuaState.h"
 #include "Net/UnrealNetwork.h"
 
 ULuaActorComponent::ULuaActorComponent(const FObjectInitializer& ObjectInitializer)
@@ -25,21 +26,28 @@ FString ULuaActorComponent::GetLuaFilePath_Implementation() const
 void ULuaActorComponent::RegistLuaTick(float TickInterval)
 {
     EnableLuaTick = true;
-    auto state = NS_SLUA::LuaState::get();
-    state->registLuaTick(this, TickInterval);
+    UWorld* world = GetWorld();
+    if (auto* state = NS_SLUA::LuaState::get(world ? world->GetGameInstance() : nullptr))
+    {
+        state->registLuaTick(this, TickInterval);
+    }
 }
 
 void ULuaActorComponent::UnRegistLuaTick()
 {
-    auto state = NS_SLUA::LuaState::get();
-    state->unRegistLuaTick(this);
+    UWorld* world = GetWorld();
+    if (auto* state = NS_SLUA::LuaState::get(world ? world->GetGameInstance() : nullptr))
+    {
+        state->unRegistLuaTick(this);
+    }
 }
 
 void ULuaActorComponent::InitializeComponent()
 {
     Super::InitializeComponent();
 
-    TryHook();
+    UWorld* world = GetWorld();
+    TryHook(NS_SLUA::LuaState::get(world ? world->GetGameInstance() : nullptr));
 }
 
 void ULuaActorComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

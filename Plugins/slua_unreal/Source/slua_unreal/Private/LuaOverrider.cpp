@@ -332,10 +332,9 @@ NS_SLUA::lua_State* ULuaOverrider::getObjectLuaState(const UObject* obj)
     }
     else
     {
-        for (TMap<NS_SLUA::lua_State*, ObjectTableMap>::TConstIterator iter(objectTableMap); iter;)
+        if (NS_SLUA::LuaState* fallbackState = NS_SLUA::LuaState::get())
         {
-            L = iter.Key();
-            break;
+            L = fallbackState->getLuaState();
         }
     }
     return L;
@@ -580,13 +579,25 @@ namespace NS_SLUA
         GUObjectArray.RemoveUObjectDeleteListener(this);
 
         FRWScopeLock lock(classHookMutex, SLT_Write);
-        objectOverriders.Empty();
-        for (auto iter : classConstructors)
+        for (auto iter = objectOverriders.CreateIterator(); iter; ++iter)
         {
-            auto cls = iter.Key.Get();
-            if (cls)
+            iter.Value().Remove(this);
+            if (iter.Value().Num() == 0)
             {
-                cls->ClassConstructor = iter.Value;
+                iter.RemoveCurrent();
+            }
+        }
+    }
+
+    void LuaOverrider::releaseGlobalHooks()
+    {
+        FRWScopeLock lock(classHookMutex, SLT_Write);
+        objectOverriders.Empty();
+        for (const TPair<TWeakObjectPtr<UClass>, UClass::ClassConstructorType>& pair : classConstructors)
+        {
+            if (UClass* cls = pair.Key.Get())
+            {
+                cls->ClassConstructor = pair.Value;
             }
         }
         classConstructors.Empty();

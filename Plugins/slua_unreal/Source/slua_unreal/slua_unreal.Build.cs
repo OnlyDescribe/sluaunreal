@@ -34,7 +34,11 @@ public class slua_unreal : ModuleRules
 
         var externalSource = Path.Combine(PluginDirectory, "External");
 
-        if (Target.Platform == UnrealTargetPlatform.Win64)
+        // Only modular Windows targets cross a DLL boundary. Monolithic game
+        // targets link lua.lib into the executable and must see plain extern
+        // declarations rather than dllimport, otherwise link.exe reports that
+        // imported Lua symbols are also defined locally (LNK4217/LNK4286).
+        if (Target.Platform == UnrealTargetPlatform.Win64 && Target.LinkType == TargetLinkType.Modular)
         {
 #if UE_4_21_OR_LATER
             // PublicDefinitions / PrivateDefinitions only exist on UE 4.21+.
@@ -44,6 +48,14 @@ public class slua_unreal : ModuleRules
 #else
             Definitions.Add("LUA_BUILD_AS_DLL=1");
             Definitions.Add("LUA_CORE=1");
+#endif
+        }
+        else if (Target.Platform == UnrealTargetPlatform.Win64)
+        {
+#if UE_4_21_OR_LATER
+            PublicDefinitions.Add("LUA_STATIC_LINK=1");
+#else
+            Definitions.Add("LUA_STATIC_LINK=1");
 #endif
         }
 

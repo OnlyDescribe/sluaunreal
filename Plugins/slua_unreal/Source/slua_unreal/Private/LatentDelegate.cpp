@@ -26,7 +26,10 @@ ULatentDelegate::ULatentDelegate(const FObjectInitializer& ObjectInitializer)
 
 void ULatentDelegate::OnLatentCallback(int32 threadRef)
 {
-    luaState->resumeThread(threadRef);
+    if (luaState)
+    {
+        luaState->resumeThread(threadRef);
+    }
 }
 
 void ULatentDelegate::bindLuaState(NS_SLUA::LuaState *_luaState)
@@ -36,7 +39,10 @@ void ULatentDelegate::bindLuaState(NS_SLUA::LuaState *_luaState)
 
 int ULatentDelegate::getThreadRef(NS_SLUA::lua_State *L)
 {
-    ensure(L);
+    if (!L || !luaState || luaState->isClosingOrClosed())
+    {
+        return LUA_REFNIL;
+    }
 
     int threadRef = luaState->findThread(L);
     if (threadRef == LUA_REFNIL)

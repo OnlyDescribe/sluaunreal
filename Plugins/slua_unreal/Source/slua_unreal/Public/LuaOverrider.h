@@ -97,6 +97,9 @@ namespace NS_SLUA
         bool tryHook(const UObjectBaseUtility* obj, bool bHookImmediate = true, bool bPostLoad = false);
         static FString getLuaFilePath(UObject* obj, class UClass* cls, bool bCDOLua, bool& bHookInstancedObj);
 
+        /** Release process-wide constructor hooks after the final LuaState unregisters. */
+        void releaseGlobalHooks();
+
 #if WITH_EDITOR
         static ULuaOverrider::ClassNativeMap cacheNativeFuncs;
         static TMap<UClass*, TArray<TWeakObjectPtr<UFunction>>> classAddedFuncs;

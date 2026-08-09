@@ -1,3 +1,29 @@
+## KeyGame / UE 5.7 reproducible workflow
+
+Do not run `lua-wrapper.exe` directly. The checked-in `config.json` is a
+machine-independent template; the PowerShell entry point injects the Engine,
+project, MSVC and Windows SDK paths into a temporary config.
+
+```powershell
+cd K:\Project\Key\Plugins\sluaunreal\Tools
+.\generate_wrapper.ps1 -EngineRoot K:\UnrealEngine-5.7.4 -ProjectRoot K:\Project\Key -VerifyDeterministic
+.\build_win64_lua.ps1 -Clean
+.\verify_win64_artifacts.ps1
+```
+
+`generate_wrapper.ps1` keeps only the UE 5.7 wrapper pair used by this fork,
+runs the required `CURRENT_FILE_ID_*_GENERATED_BODY` post-process, and can prove
+that two consecutive generations have identical SHA-256 hashes.
+
+`build_win64_lua.ps1` builds Lua 5.3.4 plus the standalone CLI and records the
+toolchain, ABI-affecting definitions, and artifact hashes in
+`Library/Win64/BUILD-MANIFEST.json`. `verify_win64_artifacts.ps1` checks that
+manifest, smoke-tests the CLI, and compares both `LuaExports.cpp` and the actual
+`slua_unreal.dll` export table with `Win64LuaExports.txt`.
+
+The generated wrapper is intentionally tied to UE 5.7. Regenerate it whenever
+the engine headers or the wrapper export configuration changes.
+
 ## lua-wrapper 是什么？
 
 lua-wrapper 是 slua-unreal 的静态代码导出工具，主要功能是将非蓝图类型生成 lua 接口导入 unreal4 中，该工具采用 c# 开发，.Net framework 是 4.6.2，依赖两个库，Newtonsoft.Json 11.0.2 和 libclang 5.0.0（32位），运行前请自行下载。

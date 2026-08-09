@@ -512,11 +512,16 @@ namespace NS_SLUA {
     {
         lua_State* L = LS->getLuaState();
         ensure(L);
-        auto& profiler = selfProfiler.FindChecked(LS);
-        if (profiler.isValid())
+        LuaVar* profiler = selfProfiler.Find(LS);
+        if (profiler && profiler->isValid())
         {
-            profiler.callField("stop", profiler);
-            selfProfiler.Remove(LS);
+            profiler->callField("stop", *profiler);
+        }
+        selfProfiler.Remove(LS);
+
+        if (selfProfiler.Num() > 0)
+        {
+            return;
         }
 
         SluaProfilerDataManager::EndRecord();
@@ -530,13 +535,20 @@ namespace NS_SLUA {
     
 
     LuaProfiler::LuaProfiler(const char* funcName)
+        : state(LuaState::get())
     {
-        takeSample(PHE_CALL, 0, funcName, "", getTime(), *LuaState::get());
+        if (state)
+        {
+            takeSample(PHE_CALL, 0, funcName, "", getTime(), *state);
+        }
     }
 
     LuaProfiler::~LuaProfiler()
     {
-        takeSample(PHE_RETURN, 0, "", "", getTime(), *LuaState::get());
+        if (state && !state->isClosingOrClosed())
+        {
+            takeSample(PHE_RETURN, 0, "", "", getTime(), *state);
+        }
     }
 
 }

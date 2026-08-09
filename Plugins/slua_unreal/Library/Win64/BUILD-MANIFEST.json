@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "luaVersion": "5.3.4",
+  "generator": "Visual Studio 17 2022",
+  "architecture": "x64",
+  "configuration": "RelWithDebInfo",
+  "compilerVersion": "Visual Studio 17 2022 (compiler path unavailable in CMake cache)",
+  "compileDefinitions": [
+    "LUA_BUILD_AS_DLL",
+    "LUA_STATIC_LINK"
+  ],
+  "cmakeSource": "Plugins/slua_unreal/CMakeLists.txt",
+  "library": "Plugins/slua_unreal/Library/Win64/lua.lib",
+  "librarySha256": "8B26C1320437BA37DB6AE402B49C52EA14AB6E091868AECDDD8D8EED22DD80F1",
+  "cli": "Plugins/slua_unreal/Library/Win64/lua.exe",
+  "cliSha256": "33D776B7F96A2A5133110BAB438FE8DB3D509B480F5B54BCA76A56E094287F82"
+}

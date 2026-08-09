@@ -30,7 +30,10 @@ void ALuaActor::PostInitializeComponents()
     // Level-placed actors are deserialized before GameInstance::Init() creates LuaOverrider,
     // so NotifyUObjectCreated auto-hook misses them. TryHook() here is safe: LuaState is
     // guaranteed ready by PostInitializeComponents, and double-hook is guarded by isUFunctionHooked.
-    TryHook();
+    if (UWorld* world = GetWorld())
+    {
+        TryHook(NS_SLUA::LuaState::get(world->GetGameInstance()));
+    }
 #endif
     ILuaOverriderInterface::PostLuaHook();
 }
@@ -38,14 +41,20 @@ void ALuaActor::PostInitializeComponents()
 void ALuaActor::RegistLuaTick(float TickInterval)
 {
     EnableLuaTick = true;
-    auto state = NS_SLUA::LuaState::get();
-    state->registLuaTick(this, TickInterval);
+    UWorld* world = GetWorld();
+    if (auto* state = NS_SLUA::LuaState::get(world ? world->GetGameInstance() : nullptr))
+    {
+        state->registLuaTick(this, TickInterval);
+    }
 }
 
 void ALuaActor::UnRegistLuaTick()
 {
-    auto state = NS_SLUA::LuaState::get();
-    state->unRegistLuaTick(this);
+    UWorld* world = GetWorld();
+    if (auto* state = NS_SLUA::LuaState::get(world ? world->GetGameInstance() : nullptr))
+    {
+        state->unRegistLuaTick(this);
+    }
 }
 
 void ALuaActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

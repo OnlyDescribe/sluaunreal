@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "engineVersion": "5.7.4",
+  "generator": "Tools/lua-wrapper.exe",
+  "generatorSha256": "50D456448F4AD43998C03B4021AD5C9AADD520A6673F8F1B407E76203F584FDE",
+  "configTemplate": "Tools/config.json",
+  "configTemplateSha256": "6A089C2A798592593B67B83AA3EEDBF3888E5CE161EB625CCB40D76B8C2B41AF",
+  "postprocess": "remove CURRENT_FILE_ID_*_GENERATED_BODY pseudo-fields",
+  "postprocessRemovedBytes": 4921,
+  "outputs": {
+    "private": "Plugins/slua_unreal/Source/slua_unreal/Private/LuaWrapper5.7.inc",
+    "privateSha256": "B479AA0E20D848634D4D56CD10EA728F7DFCF5D6C7279E45CAB72A4404B39ED0",
+    "public": "Plugins/slua_unreal/Source/slua_unreal/Public/LuaWrapper5.7Head.inc",
+    "publicSha256": "D2E20F171D4AC258F754A47160880D805735EE23F289D71C60DB071CF37C4561"
+  }
+}

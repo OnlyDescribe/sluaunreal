@@ -35,3 +35,14 @@ void ILuaOverriderInterface::TryHook()
 
     NS_SLUA::LuaState::hookObject(nullptr, obj, true);
 }
+
+bool ILuaOverriderInterface::TryHook(NS_SLUA::LuaState* LuaState)
+{
+    UObject* obj = Cast<UObject>(this);
+    if (!obj || !LuaState || LuaState->isClosingOrClosed())
+    {
+        return false;
+    }
+
+    return NS_SLUA::LuaState::hookObject(LuaState, obj, true);
+}

@@ -901,6 +901,11 @@ namespace NS_SLUA {
             outParamCount = funcAcc->call(L, offset, obj, isLatentFunction, &objectRecorder);
         }
 
+        if (outParamCount < 0)
+        {
+            return lua_error(L);
+        }
+
         if (isLatentFunction)
             return lua_yield(L, outParamCount);
         return outParamCount;
@@ -1886,24 +1891,47 @@ namespace NS_SLUA {
         ensure(p);
         int type = lua_type(L, i);
         if (type == LUA_TTABLE) {
-            int arraySize = lua_rawlen(L, i);
-            if (arraySize <= 0)
-                return 0;
-            int tableIndex = i;
-            if (i < 0 && i > LUA_REGISTRYINDEX) {
-                tableIndex = i - 1;
+            const int tableIndex = lua_absindex(L, i);
+            lua_Integer maxIndex = 0;
+            int32 elementCount = 0;
+
+            lua_pushnil(L);
+            while (lua_next(L, tableIndex) != 0)
+            {
+                const bool bIntegerKey = lua_type(L, -2) == LUA_TNUMBER && lua_isinteger(L, -2);
+                const lua_Integer key = bIntegerKey ? lua_tointeger(L, -2) : 0;
+                lua_pop(L, 1);
+
+                if (!bIntegerKey || key < 1 || key > MAX_int32)
+                {
+                    lua_pop(L, 1);
+                    luaL_error(L,
+                        "argument %d for array property %s must be a dense sequence; keys must be integers in [1, %d]",
+                        i, TCHAR_TO_UTF8(*p->GetName()), MAX_int32);
+                    return nullptr;
+                }
+
+                ++elementCount;
+                maxIndex = FMath::Max(maxIndex, key);
+            }
+
+            if (static_cast<lua_Integer>(elementCount) != maxIndex)
+            {
+                luaL_error(L,
+                    "argument %d for array property %s must be a dense sequence; found a hole between 1 and %I",
+                    i, TCHAR_TO_UTF8(*p->GetName()), maxIndex);
+                return nullptr;
             }
 
             FScriptArrayHelper arrayHelper(p, parms);
-            arrayHelper.Resize(arraySize);
+            arrayHelper.Resize(elementCount);
 
             auto checker = LuaObject::getChecker(p->Inner);
 
-            int index = 0;
-
-            lua_pushnil(L);
-            while (index < arraySize && lua_next(L, tableIndex) != 0) {
-                checker(L, p->Inner, arrayHelper.GetRawPtr(index++), -1, bForceCopy);
+            for (int32 index = 0; index < elementCount; ++index)
+            {
+                lua_rawgeti(L, tableIndex, index + 1);
+                checker(L, p->Inner, arrayHelper.GetRawPtr(index), -1, bForceCopy);
                 lua_pop(L, 1);
             }
             return nullptr;
@@ -2872,7 +2900,18 @@ namespace NS_SLUA {
         if (DeferGCStruct && !ls->isRef)
         {
             LuaState* luaState = LuaState::get(L);
-            luaState->deferGCStruct.Add(ls);
+            if (luaState && !luaState->isClosingOrClosed())
+            {
+                luaState->deferGCStruct.Add(ls);
+            }
+            else
+            {
+                if (luaState)
+                {
+                    ++luaState->closingDirectStructDeleteCount;
+                }
+                delete ls;
+            }
         }
         else
         {
