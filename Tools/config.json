@@ -64,12 +64,13 @@
 
         {
             "type": "FGuid",
-            "methods": ["NewDeterministicGuid"]
+            "methods": ["NewDeterministicGuid"],
+            "properties": ["AutoRTFMReturnFromOpenMode"]
         },
         {
             "type": "FSphere",
             "methods": ["ToString"]
-        },
+        }
     ],
     "filter_class": [
         "FPolyglotTextData",
@@ -78,6 +79,7 @@
         "FAssetBundleData",
         "FRemoteObjectData",
         "FRemoteObjectTables",
+        "FPackedRemoteObjectHeader",
         "FPackedRemoteObjectPathName",
         "FRemoteObjectBytes",
         "FRemoteObjectId",

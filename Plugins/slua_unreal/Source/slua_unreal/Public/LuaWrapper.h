@@ -18,10 +18,14 @@
 
 namespace NS_SLUA {
 
-    static_assert(ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 7,
-        "This slua fork's generated wrapper targets Unreal Engine 5.7.");
     using FVector2 = UE::Math::TVector2<FVector::FReal>;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 8
+    #include "LuaWrapper5.8Head.inc"
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 7
     #include "LuaWrapper5.7Head.inc"
+#else
+    #error "Regenerate and validate slua wrappers for this Unreal Engine version."
+#endif
     DefTypeName(FSoftObjectPtr);
 
     struct LuaWrapper {

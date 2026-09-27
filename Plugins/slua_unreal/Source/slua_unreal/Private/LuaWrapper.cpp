@@ -16,6 +16,9 @@
 #include "LuaNetSerialization.h"
 #include "UObject/Package.h"
 #include "Misc/FrameTime.h"
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+#include "Misc/FallbackStruct.h"
+#endif
 
 #define SLUA_GCSTRUCT(typeName) auto flag = udptr->flag; \
                     if (udptr->parent) { \
@@ -52,7 +55,11 @@ namespace NS_SLUA {
 	    return FindObjectSafe<UScriptStruct>(CoreUObjectPkg, Name);
     }
 
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 8
+    #include "LuaWrapper5.8.inc"
+#else
     #include "LuaWrapper5.7.inc"
+#endif
 
     static inline FSoftObjectPtr* __newFSoftObjectPtr() {
         return new FSoftObjectPtr();

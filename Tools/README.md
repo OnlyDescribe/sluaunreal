@@ -1,19 +1,27 @@
-## KeyGame / UE 5.7 reproducible workflow
+## KeyGame / UE 5.7 and 5.8 reproducible workflow
 
 Do not run `lua-wrapper.exe` directly. The checked-in `config.json` is a
 machine-independent template; the PowerShell entry point injects the Engine,
 project, MSVC and Windows SDK paths into a temporary config.
 
 ```powershell
-cd K:\Project\Key\Plugins\sluaunreal\Tools
-.\generate_wrapper.ps1 -EngineRoot K:\UnrealEngine-5.7.4 -ProjectRoot K:\Project\Key -VerifyDeterministic
+cd E:\workspace\KeyGame\Plugins\sluaunreal\Tools
+.\generate_wrapper.ps1 -EngineRoot E:\UnrealEngine-5.8.3-release -ProjectRoot E:\workspace\KeyGame -VerifyDeterministic
 .\build_win64_lua.ps1 -Clean
 .\verify_win64_artifacts.ps1
 ```
 
-`generate_wrapper.ps1` keeps only the UE 5.7 wrapper pair used by this fork,
-runs the required `CURRENT_FILE_ID_*_GENERATED_BODY` post-process, and can prove
-that two consecutive generations have identical SHA-256 hashes.
+First generate project files using the selected engine's `GenerateProjectFiles.bat`.
+`generate_wrapper.ps1` writes the wrapper pair for that engine's minor version,
+preserves the other supported pair, and runs the required
+`CURRENT_FILE_ID_*_GENERATED_BODY` post-process. `-VerifyDeterministic` compares
+two consecutive generations by SHA-256; compilation and runtime tests still
+need to validate the exported API. `WrapperGenerationManifest.json` records
+the most recent generation and its inputs.
+
+`WrapperTypes.h` completes the `TBaseStructure` input types without depending
+on the engine's deprecated transitive includes. The runtime wrapper also
+includes `Misc/FallbackStruct.h` explicitly on UE 5.8.
 
 `build_win64_lua.ps1` builds Lua 5.3.4 plus the standalone CLI and records the
 toolchain, ABI-affecting definitions, and artifact hashes in
@@ -21,8 +29,9 @@ toolchain, ABI-affecting definitions, and artifact hashes in
 manifest, smoke-tests the CLI, and compares both `LuaExports.cpp` and the actual
 `slua_unreal.dll` export table with `Win64LuaExports.txt`.
 
-The generated wrapper is intentionally tied to UE 5.7. Regenerate it whenever
-the engine headers or the wrapper export configuration changes.
+Compilation selects the matching UE 5.7 or 5.8 wrapper. Other engine versions
+require a new generated pair and validation. Regenerate whenever engine headers
+or the wrapper export configuration changes; do not hand-edit generated output.
 
 ## lua-wrapper 是什么？
 

@@ -32,11 +32,16 @@ function Get-WindowsToolchainIncludes
     $VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
     if (Test-Path -LiteralPath $VsWhere)
     {
-        $VsRoot = (& $VsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath).Trim()
-        if ($LASTEXITCODE -eq 0 -and $VsRoot)
+        # Version-specific Build Tools components do not satisfy the generic
+        # VC.Tools.x86.x64 component query. Inspect every registered instance.
+        $VsRoots = @(& $VsWhere -all -products * -property installationPath)
+        if ($LASTEXITCODE -eq 0)
         {
-            $MsvcRoot = Join-Path $VsRoot "VC\Tools\MSVC"
-            $MsvcVersion = Get-ChildItem -LiteralPath $MsvcRoot -Directory -ErrorAction SilentlyContinue |
+            $MsvcDirectories = foreach ($VsRoot in $VsRoots)
+            {
+                Get-ChildItem -LiteralPath (Join-Path $VsRoot "VC\Tools\MSVC") -Directory -ErrorAction SilentlyContinue
+            }
+            $MsvcVersion = $MsvcDirectories |
                 Sort-Object { [version]$_.Name } -Descending |
                 Select-Object -First 1
             if ($MsvcVersion)
@@ -77,6 +82,12 @@ function Get-WindowsToolchainIncludes
 }
 
 $EngineRoot = Resolve-ExistingDirectory $EngineRoot "Engine root"
+$EngineBuildVersion = Get-Content -LiteralPath (Join-Path $EngineRoot "Engine\Build\Build.version") -Raw | ConvertFrom-Json
+$WrapperVersion = "$($EngineBuildVersion.MajorVersion).$($EngineBuildVersion.MinorVersion)"
+if ($WrapperVersion -notin @("5.7", "5.8"))
+{
+    throw "Wrapper generation supports UE 5.7 and 5.8; review the export contract before adding $WrapperVersion."
+}
 $ProjectRoot = Resolve-ExistingDirectory $ProjectRoot "Project root"
 $SubmoduleRoot = Resolve-ExistingDirectory (Join-Path $PSScriptRoot "..") "slua submodule root"
 $ProjectFile = Join-Path $ProjectRoot "Key.uproject"
@@ -100,8 +111,8 @@ $PrivateOutput = Join-Path $SubmoduleRoot "Plugins\slua_unreal\Source\slua_unrea
 $PublicOutput = Join-Path $SubmoduleRoot "Plugins\slua_unreal\Source\slua_unreal\Public"
 $RawInc = Join-Path $PrivateOutput "LuaWrapper.inc"
 $RawHead = Join-Path $PublicOutput "LuaWrapperHead.inc"
-$VersionedInc = Join-Path $PrivateOutput "LuaWrapper5.7.inc"
-$VersionedHead = Join-Path $PublicOutput "LuaWrapper5.7Head.inc"
+$VersionedInc = Join-Path $PrivateOutput "LuaWrapper$WrapperVersion.inc"
+$VersionedHead = Join-Path $PublicOutput "LuaWrapper${WrapperVersion}Head.inc"
 $ManifestPath = Join-Path $PSScriptRoot "WrapperGenerationManifest.json"
 $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
@@ -118,11 +129,13 @@ $LastPostprocessRemovedBytes = 0
 
 function Invoke-WrapperGeneration
 {
-    $TemporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("slua-wrapper-" + [guid]::NewGuid().ToString("N"))
+    $TemporaryRoot = Resolve-ExistingDirectory ([System.IO.Path]::GetTempPath()) "Temporary root"
+    $TemporaryDirectory = Join-Path $TemporaryRoot ("slua-wrapper-" + [guid]::NewGuid().ToString("N"))
     [void](New-Item -ItemType Directory -Path $TemporaryDirectory)
     try
     {
         $Config = Get-Content -LiteralPath $ConfigTemplatePath -Raw | ConvertFrom-Json
+        $Config.export_files.TBaseStructure += Convert-ToToolPath (Join-Path $PSScriptRoot "WrapperTypes.h")
         $Config.win.solution_dir = Convert-ToToolPath $SubmoduleRoot
         $Config.win.ue4_dir = Convert-ToToolPath $EngineRoot
         $Config.win.ue_vcproj = Convert-ToToolPath $ProjectVcxproj
@@ -183,7 +196,15 @@ function Invoke-WrapperGeneration
     }
     finally
     {
-        Remove-Item -LiteralPath $TemporaryDirectory -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $TemporaryDirectory)
+        {
+            $ResolvedTemporary = (Resolve-Path -LiteralPath $TemporaryDirectory).Path
+            if (-not $ResolvedTemporary.StartsWith($TemporaryRoot.TrimEnd('\') + '\slua-wrapper-', [StringComparison]::OrdinalIgnoreCase))
+            {
+                throw "Unexpected wrapper temporary directory: $ResolvedTemporary"
+            }
+            Remove-Item -LiteralPath $ResolvedTemporary -Recurse -Force
+        }
     }
 }
 
@@ -213,17 +234,17 @@ $Manifest = [ordered]@{
     postprocess = "remove CURRENT_FILE_ID_*_GENERATED_BODY pseudo-fields"
     postprocessRemovedBytes = $LastPostprocessRemovedBytes
     outputs = [ordered]@{
-        private = "Plugins/slua_unreal/Source/slua_unreal/Private/LuaWrapper5.7.inc"
+        private = "Plugins/slua_unreal/Source/slua_unreal/Private/LuaWrapper$WrapperVersion.inc"
         privateSha256 = (Get-FileHash -LiteralPath $VersionedInc -Algorithm SHA256).Hash
-        public = "Plugins/slua_unreal/Source/slua_unreal/Public/LuaWrapper5.7Head.inc"
+        public = "Plugins/slua_unreal/Source/slua_unreal/Public/LuaWrapper${WrapperVersion}Head.inc"
         publicSha256 = (Get-FileHash -LiteralPath $VersionedHead -Algorithm SHA256).Hash
     }
 }
 [System.IO.File]::WriteAllText($ManifestPath, ($Manifest | ConvertTo-Json -Depth 10), $Utf8NoBom)
 
 Write-Host "Generated UE $($Manifest.engineVersion) wrapper."
-Write-Host "LuaWrapper5.7.inc SHA256: $($Manifest.outputs.privateSha256)"
-Write-Host "LuaWrapper5.7Head.inc SHA256: $($Manifest.outputs.publicSha256)"
+Write-Host "LuaWrapper$WrapperVersion.inc SHA256: $($Manifest.outputs.privateSha256)"
+Write-Host "LuaWrapper${WrapperVersion}Head.inc SHA256: $($Manifest.outputs.publicSha256)"
 if ($VerifyDeterministic)
 {
     Write-Host "Determinism check: two consecutive generations matched."
