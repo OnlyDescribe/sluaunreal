@@ -5,8 +5,12 @@ machine-independent template; the PowerShell entry point injects the Engine,
 project, MSVC and Windows SDK paths into a temporary config.
 
 ```powershell
-cd E:\workspace\KeyGame\Plugins\sluaunreal\Tools
-.\generate_wrapper.ps1 -EngineRoot E:\UnrealEngine-5.8.3-release -ProjectRoot E:\workspace\KeyGame -VerifyDeterministic
+# From the host project's root; configure KEY_ENGINE_ROOT locally first.
+$projectRoot = (Get-Location).Path
+$engineRoot = python Tools/unreal.py root
+if ($LASTEXITCODE -ne 0) { throw 'Configure the pinned engine before generating wrappers.' }
+Set-Location Plugins/sluaunreal/Tools
+.\generate_wrapper.ps1 -EngineRoot $engineRoot -ProjectRoot $projectRoot -VerifyDeterministic
 .\build_win64_lua.ps1 -Clean
 .\verify_win64_artifacts.ps1
 ```
