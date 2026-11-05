@@ -25,6 +25,9 @@ two consecutive generations by SHA-256; compilation and runtime tests still
 need to validate the exported API. `WrapperGenerationManifest.json` records
 the most recent generation and its inputs.
 
+`.gitattributes` keeps the generated wrapper pairs in LF form on every checkout
+so their manifest hashes remain valid before running the generator again.
+
 `WrapperTypes.h` completes the `TBaseStructure` input types without depending
 on the engine's deprecated transitive includes. The runtime wrapper also
 includes `Misc/FallbackStruct.h` explicitly on UE 5.8.
