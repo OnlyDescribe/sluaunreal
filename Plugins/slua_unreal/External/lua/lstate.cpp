@@ -254,7 +254,7 @@ static void close_state (lua_State *L) {
 }
 
 
-LUA_API lua_State *lua_newthread (lua_State *L) {
+LUA_API lua_State *lua_newthread (lua_State *L) LUA_THROWS {
   global_State *g = G(L);
   lua_State *L1;
   lua_lock(L);

@@ -170,8 +170,15 @@ void ULuaOverrider::luaOverrideFunc(UObject* Context, FFrame& Stack, RESULT_DECL
         {
             NS_SLUA::LuaVar* luaSelfTable = &objTable->table;
         
-            NS_SLUA::LuaVar luaFunc = getLuaFunction(L, obj, luaSelfTable, functionName);
-            if (luaFunc.isValid())
+            NS_SLUA::LuaVar luaFunc;
+            FString Error;
+            if (getLuaFunction(L, obj, luaSelfTable, functionName, luaFunc, Error) != LUA_OK)
+            {
+                NS_SLUA::Log::Error("%s.%s: %s", TCHAR_TO_UTF8(*obj->GetName()),
+                    TCHAR_TO_UTF8(*functionName), TCHAR_TO_UTF8(*Error));
+                bCallSuper = false;
+            }
+            else if (luaFunc.isFunction())
             {
                 NS_SLUA::AutoStack as(L);
                 luaFunc.callByUFunction(func, locals, bContextOp ? nullptr : Stack.OutParms, luaSelfTable);
@@ -379,21 +386,16 @@ void ULuaOverrider::InputGesture_Implementation(float Value)
 {
 }
 
-NS_SLUA::LuaVar ULuaOverrider::getLuaFunction(NS_SLUA::lua_State* L, UObject* obj, const NS_SLUA::LuaVar* table, const FString& funcName)
+int ULuaOverrider::getLuaFunction(NS_SLUA::lua_State* L, UObject* obj,
+    const NS_SLUA::LuaVar* table, const FString& funcName, NS_SLUA::LuaVar& Function, FString& Error)
 {
-    if (!obj || !table)
+    check(obj && table);
+    // Blueprint-only interface implementations do not have a native interface cache.
+    if (auto* Interface = Cast<ILuaOverriderInterface>(obj))
     {
-        return NS_SLUA::LuaVar();
+        return Interface->ResolveLuaFunction(L, *table, funcName, Function, Error);
     }
-    NS_SLUA::AutoStack as(L);
-
-    // implement ILuaOverriderInterface in BP will cause Cast fail. getLuaFunction each time for this case
-    ILuaOverriderInterface* overrideInterface = Cast<ILuaOverriderInterface>(obj);
-    if (overrideInterface)
-    {
-        return overrideInterface->GetCachedLuaFunc(L, *table, funcName);
-    }
-    return ILuaOverriderInterface::getFromTableIndex<NS_SLUA::LuaVar>(L, *table, funcName);
+    return ILuaOverriderInterface::LookupLuaFunction(L, *table, funcName, Function, Error);
 }
 
 bool ULuaOverrider::isUFunctionHooked(UFunction* func)
@@ -688,8 +690,7 @@ namespace NS_SLUA
                     UClass* cls = obj->GetClass();
                     if (bHookImmediate)
                     {
-                        bindOverrideFuncs(obj, cls);
-                        return true;
+                        return bindOverrideFuncs(obj, cls);
                     }
 
 #if USE_CIRCULAR_DEPENDENCY_LOAD_DEFERRING
@@ -703,8 +704,7 @@ namespace NS_SLUA
                     overriderList.Add(this);
                     return true;
 #else
-                    bindOverrideFuncs(obj, cls);
-                    return true;
+                    return bindOverrideFuncs(obj, cls);
 #endif
                 }
             }

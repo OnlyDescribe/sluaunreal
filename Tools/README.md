@@ -33,6 +33,12 @@ toolchain, ABI-affecting definitions, and artifact hashes in
 manifest, smoke-tests the CLI, and compares both `LuaExports.cpp` and the actual
 `slua_unreal.dll` export table with `Win64LuaExports.txt`.
 
+The Lua build uses CMake's default Visual Studio generator, or
+`CMAKE_GENERATOR` when explicitly configured, with the x64 platform. Use a
+CMake release that supports the installed Visual Studio. The manifest records
+the selected generator and actual compiler version. A build directory belongs
+to its selected generator; use a fresh build directory when changing it.
+
 Compilation selects the matching UE 5.7 or 5.8 wrapper. Other engine versions
 require a new generated pair and validation. Regenerate whenever engine headers
 or the wrapper export configuration changes; do not hand-edit generated output.

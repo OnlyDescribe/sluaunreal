@@ -25,6 +25,7 @@ namespace NS_SLUA {
         static LuaFunctionAccelerator* findOrAdd(UFunction* inFunc);
         static bool remove(UFunction* inFunc);
         static void clear();
+        static bool IsValid(LuaFunctionAccelerator* Accel);
 
         int call(lua_State* L, int offset, UObject* obj, bool& isLatentFunction, NewObjectRecorder* objRecorder);
 
@@ -42,6 +43,7 @@ namespace NS_SLUA {
 
     protected:
         static TMap<UFunction*, LuaFunctionAccelerator*> cache;
+        static TSet<LuaFunctionAccelerator*> ValidAccels;
 
         struct AutoDestructor
         {
@@ -146,9 +148,7 @@ namespace NS_SLUA {
         };
 
         struct FProtectedCallContext;
-        static int protectedFillParams(lua_State* L);
-        static int protectedInvoke(lua_State* L);
-        static int protectedPushResults(lua_State* L);
+        static int protectedCall(lua_State* L);
 
         bool bNativeFunc;
         

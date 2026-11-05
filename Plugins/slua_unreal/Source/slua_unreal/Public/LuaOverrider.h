@@ -25,7 +25,8 @@ public:
     static ObjectTableMap* getObjectTableMap(NS_SLUA::lua_State* L);
     static NS_SLUA::LuaVar* getObjectLuaTable(const UObject* obj, NS_SLUA::lua_State* L = nullptr);
     static FObjectTable* getObjectTable(const UObject* obj, NS_SLUA::lua_State* L = nullptr);
-    static NS_SLUA::LuaVar getLuaFunction(NS_SLUA::lua_State* L, UObject* obj, const NS_SLUA::LuaVar* table, const FString& funcName);
+    static int getLuaFunction(NS_SLUA::lua_State* L, UObject* obj, const NS_SLUA::LuaVar* table,
+        const FString& funcName, NS_SLUA::LuaVar& Function, FString& Error);
 
 	static bool isUFunctionHooked(UFunction* func);
     

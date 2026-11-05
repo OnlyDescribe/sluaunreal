@@ -102,6 +102,8 @@ namespace NS_SLUA
 
         lua_pushvalue(L, lua_upvalueindex(1));
         auto* funcAcc = (LuaFunctionAccelerator*)lua_touserdata(L, -1);
+        if (!LuaFunctionAccelerator::IsValid(funcAcc))
+            return luaL_error(L, "Super function accelerator is invalid");
         auto func = funcAcc->func;
         if (!IsValid(func) || !func->IsValidLowLevel())
             luaL_error(L, "Super function is invalid");
@@ -124,6 +126,9 @@ namespace NS_SLUA
             NewObjectRecorder objectRecorder(L);
             outParamCount = funcAcc->call(L, 2, obj, isLatentFunction, &objectRecorder);
         }
+
+        if (outParamCount < 0)
+            return lua_error(L);
 
         if (isLatentFunction)
             return lua_yield(L, outParamCount);

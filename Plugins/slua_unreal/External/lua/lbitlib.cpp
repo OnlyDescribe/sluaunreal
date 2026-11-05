@@ -214,7 +214,7 @@ static const luaL_Reg bitlib[] = {
 
 
 
-LUAMOD_API int luaopen_bit32 (lua_State *L) {
+LUAMOD_API int luaopen_bit32 (lua_State *L) LUA_THROWS {
   luaL_newlib(L, bitlib);
   return 1;
 }
@@ -223,7 +223,7 @@ LUAMOD_API int luaopen_bit32 (lua_State *L) {
 #else					/* }{ */
 
 
-LUAMOD_API int luaopen_bit32 (lua_State *L) {
+LUAMOD_API int luaopen_bit32 (lua_State *L) LUA_THROWS {
   return luaL_error(L, "library 'bit32' has been deprecated");
 }
 

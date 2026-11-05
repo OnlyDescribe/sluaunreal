@@ -334,6 +334,8 @@ namespace NS_SLUA
 #endif
         }
         
+        if (inner && isNewInner) inner->AddReferencedObjects(Collector);
+
         if (isRef || num() <= 0)
             return;
 
@@ -369,39 +371,14 @@ namespace NS_SLUA
         emptyElements();
     }
 
-    // Rewrite FScriptSetHelper::EmptyElements by adding ShouldFree judgment. If it's true, cal the original one.
     void LuaSet::emptyElements(int32 slack)
     {
-        if (!isRef) 
-        {
-            helper.EmptyElements();
-        }
-        else 
-        {
-            checkSlow(slack >= 0);
-            const int32 OldNum = num();
-            if (OldNum || slack) 
-            {
-                set->Empty(slack, helper.SetLayout);
-            }
-        }
+        helper.EmptyElements(slack);
     }
 
-    // Modify FScriptSetHelper::RemoveAt by adding ShouldFree judgment. If it's true, call the original one.
     void LuaSet::removeAt(int32 index, int32 count)
     {
-        if (!isRef) {
-            helper.RemoveAt(index);
-        }
-        else {
-            check(helper.IsValidIndex(index));
-            for (; count; ++index) {
-                if (helper.IsValidIndex(index)) {
-                    set->RemoveAt(index, helper.SetLayout);
-                    --count;
-                }
-            }
-        }
+        helper.RemoveAt(index, count);
     }
 
     // Modify FScriptSetHelper::RemoveAt for the use of our custom removeAt.

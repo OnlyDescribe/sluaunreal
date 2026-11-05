@@ -26,7 +26,6 @@
 
 namespace NS_SLUA {
 
-    FSafeOutputDelegate LuaVar::safeOutputLambda;
 
     const int INVALID_INDEX = -1;
     LuaVar::LuaVar()
@@ -171,6 +170,9 @@ namespace NS_SLUA {
             lua_pushvalue(l,p);
             vars[0].ref = new RefRef(l);
             vars[0].luatype=type;
+#if UE_BUILD_DEVELOPMENT
+            state->addRefTraceback(vars[0].ref->ref);
+#endif
             break;
         case LV_TUPLE:
             ensure(p>0 && lua_gettop(l)>=p);
@@ -294,19 +296,14 @@ namespace NS_SLUA {
                 break;
             }
             case LUA_TFUNCTION:
-                vars[i].luatype = LV_FUNCTION;
-                lua_pushvalue(l,p);
-                vars[i].ref = new RefRef(l);
-                break;
             case LUA_TTABLE:
-                vars[i].luatype = LV_TABLE;
-                lua_pushvalue(l,p);
-                vars[i].ref = new RefRef(l);
-                break;
             case LUA_TUSERDATA:
-                vars[i].luatype = LV_USERDATA;
                 lua_pushvalue(l, p);
                 vars[i].ref = new RefRef(l);
+                vars[i].luatype = t == LUA_TFUNCTION ? LV_FUNCTION : t == LUA_TTABLE ? LV_TABLE : LV_USERDATA;
+#if UE_BUILD_DEVELOPMENT
+                LuaState::get(l)->addRefTraceback(vars[i].ref->ref);
+#endif
                 break;
             case LUA_TLIGHTUSERDATA:
                 vars[i].luatype = LV_LIGHTUD;
@@ -329,9 +326,6 @@ namespace NS_SLUA {
     {
         ref=luaL_ref(l,LUA_REGISTRYINDEX);
         stateIndex = LuaState::get(l)->stateIndex();
-#if UE_BUILD_DEVELOPMENT
-        LuaState::get(l)->addRefTraceback(ref);
-#endif
     }
 
     LuaVar::RefRef::~RefRef() {
@@ -769,7 +763,7 @@ namespace NS_SLUA {
 
         if (remain > 0)
         {
-            safeOutputLambda = FSafeOutputDelegate::CreateLambda([&]()
+            auto safeOutputLambda = FSafeOutputDelegate::CreateLambda([&]()
             {
                 // if lua return value
                 // we only handle first lua return value
@@ -788,42 +782,16 @@ namespace NS_SLUA {
                 }
             });
             
-            if (!L->errfunc)
-            {
-                int errhandle = LuaState::pushErrorHandler(L);
-                lua_pushcfunction(L, safeOutput);
-                for (int i = 0; i < remain; ++i)
-                    lua_pushvalue(L, -remain - 2);
-
-                if (lua_pcall(L, remain, 0, errhandle) != 0) {
-                    LuaState::get(L)->onError(TCHAR_TO_UTF8(
-                        *FString::Printf(TEXT("Class[%s] function[%s] return type mismatch! error: %s"),
-                            *func->GetOuter()->GetName(), *func->GetName(), UTF8_TO_TCHAR(lua_tostring(L, -1)))));
-
-                    lua_pop(L, 1);
-                }
+            luaL_checkstack(L, remain + 3, "reflected Lua output conversion");
+            int errhandle = LuaState::pushErrorHandler(L);
+            lua_pushcfunction(L, safeOutput);
+            lua_pushlightuserdata(L, &safeOutputLambda);
+            for (int i = 0; i < remain; ++i)
+                lua_pushvalue(L, -remain - 3);
+            if (lua_pcall(L, remain + 1, 0, errhandle) != LUA_OK)
                 lua_pop(L, 1);
-            }
-            else 
-            {
-                auto errfunc = L->errfunc;
-                L->errfunc = 0;
+            lua_pop(L, 1);
 
-                try
-                {
-                    safeOutputLambda.Execute();
-                }
-                catch (...)
-                {
-                    LuaState::get(L)->onError(TCHAR_TO_UTF8(
-                        *FString::Printf(TEXT("Class[%s] function[%s] return type mismatch! error: %s"),
-                            *func->GetOuter()->GetName(), *func->GetName(), UTF8_TO_TCHAR(lua_tostring(L, -1)))));
-
-                    lua_pop(L, 1); // pop error msg
-                }
-
-                L->errfunc = errfunc;
-            }
         }
 
         // pop returned value
@@ -833,7 +801,9 @@ namespace NS_SLUA {
 
     int LuaVar::safeOutput(lua_State* L)
     {
-        safeOutputLambda.Execute();
+        auto* output = static_cast<FSafeOutputDelegate*>(lua_touserdata(L, 1));
+        lua_remove(L, 1);
+        output->Execute();
         return 0;
     }
 

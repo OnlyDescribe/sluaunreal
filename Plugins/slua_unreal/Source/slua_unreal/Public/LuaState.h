@@ -242,6 +242,7 @@ namespace NS_SLUA {
 
         int addThread(lua_State *thread);
         void resumeThread(int threadRef);
+        void removeThread(lua_State* thread);
         int findThread(lua_State *thread);
         void cleanupThreads();
         ULatentDelegate* getLatentDelegate() const;

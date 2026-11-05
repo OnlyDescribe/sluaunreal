@@ -1109,6 +1109,11 @@ namespace NS_SLUA {
         return true;
     }
 
+    void LuaState::removeThread(lua_State* thread)
+    {
+        releaseThreadRef(findThread(thread), thread);
+    }
+
     void LuaState::resumeThread(int threadRef)
     {
         QUICK_SCOPE_CYCLE_COUNTER(Lua_LatentCallback);

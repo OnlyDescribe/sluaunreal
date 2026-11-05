@@ -304,7 +304,7 @@ static int auxgetinfo (lua_State *L, const char *what, lua_Debug *ar,
 }
 
 
-LUA_API int lua_getinfo (lua_State *L, const char *what, lua_Debug *ar) {
+LUA_API int lua_getinfo (lua_State *L, const char *what, lua_Debug *ar) LUA_THROWS {
   int status;
   Closure *cl;
   CallInfo *ci;

@@ -46,7 +46,7 @@ namespace NS_SLUA {
     }
 
     void LuaMap::clone(FScriptMap* dest,FProperty* keyProp, FProperty* valueProp,const FScriptMap* src) {
-        if(!src)
+        if(!src || dest == src)
             return;
 
         FScriptMapHelper dstHelper = FScriptMapHelper::CreateHelperFormInnerProperties(keyProp,valueProp, dest);
@@ -154,6 +154,11 @@ namespace NS_SLUA {
 #endif
         }
 
+        if (isNewInner) {
+            keyProp->AddReferencedObjects(Collector);
+            valueProp->AddReferencedObjects(Collector);
+        }
+
         // if is reference, skip AddReferencedObject
         if(isRef || num()<=0) return;
 
@@ -204,10 +209,8 @@ namespace NS_SLUA {
         checkSlow(Slack >= 0);
 
         int32 OldNum = num();
-        if(!isRef) {
-            if (OldNum) {
-                destructItems(0, OldNum);
-            }
+        if (OldNum) {
+            destructItems(0, OldNum);
         }
         if (OldNum || Slack) {
             map->Empty(Slack, helper.MapLayout);
@@ -216,8 +219,6 @@ namespace NS_SLUA {
 
     // modified FScriptMapHelper::DestructItems function to add value property offset on value ptr 
     void LuaMap::destructItems(uint8* PairPtr, uint32 Stride, int32 Index, int32 Count, bool bDestroyKeys, bool bDestroyValues) {
-        // if map is owned by uobject, don't destructItems
-        if(isRef) return;
 #if (ENGINE_MINOR_VERSION<22) && (ENGINE_MAJOR_VERSION==4)
         int32 keyOffset = helper.MapLayout.KeyOffset;
 #else

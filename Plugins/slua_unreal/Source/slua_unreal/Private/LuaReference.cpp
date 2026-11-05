@@ -40,7 +40,8 @@ namespace NS_SLUA {
             if (!!(castFlags & StructPropertyFlag)) {
                 if (auto structProp = CastField<FStructProperty>(prop)) {
                     auto scriptStruct = structProp->Struct;
-                    if (scriptStruct && (scriptStruct->StructFlags & STRUCT_IsPlainOldData))
+                    if (scriptStruct && (scriptStruct->StructFlags & STRUCT_IsPlainOldData) &&
+                        !(scriptStruct->StructFlags & STRUCT_AddStructReferencedObjects))
                         return false;
                 }
             }
@@ -48,6 +49,11 @@ namespace NS_SLUA {
         }
 
         void addRefByStruct(FReferenceCollector& collector, UStruct* us, void* base) {
+            if (auto scriptStruct = Cast<UScriptStruct>(us);
+                scriptStruct && (scriptStruct->StructFlags & STRUCT_AddStructReferencedObjects)) {
+                scriptStruct->GetCppStructOps()->AddStructReferencedObjects()(base, collector);
+            }
+            // Serialization exclusions do not make reflected UObject references weak.
             for (TFieldIterator<const FProperty> it(us); it; ++it)
             {
                 auto prop = *it;
@@ -125,7 +131,8 @@ namespace NS_SLUA {
             bool ret = false;
             for (int n = 0; n < p->ArrayDim; ++n)
             {
-                UObject* obj = p->GetObjectPropertyValue(base);
+                void* element = (uint8*)base + n * GetPropertyElementSize(p);
+                UObject* obj = p->GetObjectPropertyValue(element);
                 if (obj && obj->IsValidLowLevel())
                 {
 #if ENGINE_MAJOR_VERSION==5 && ENGINE_MINOR_VERSION >= 4
@@ -138,7 +145,7 @@ namespace NS_SLUA {
                     if (newobj != obj)
                     {
                         ret = true;
-                        p->SetObjectPropertyValue(base, newobj);
+                        p->SetObjectPropertyValue(element, newobj);
                     }
                 }
             }

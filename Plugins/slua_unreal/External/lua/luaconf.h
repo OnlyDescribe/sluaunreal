@@ -284,6 +284,17 @@
 #endif				/* } */
 
 /* more often than not the libs go together with the core */
+/* Public APIs that can propagate a Lua error or yield use this specification,
+** independent of their current callers. The C++ VM unwinds with exceptions;
+** preserve the C export ABI without /EHsc's implicit non-throwing assumption.
+** Keep declarations and definitions synchronized; internal helpers need no
+** blanket annotation. Non-raising APIs retain their original declarations. */
+#if defined(__cplusplus)
+#define LUA_THROWS noexcept(false)
+#else
+#define LUA_THROWS
+#endif
+
 #define LUALIB_API	LUA_API
 #define LUAMOD_API	LUALIB_API
 

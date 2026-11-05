@@ -34,52 +34,52 @@ typedef struct luaL_Reg {
 
 #define LUAL_NUMSIZES	(sizeof(lua_Integer)*16 + sizeof(lua_Number))
 
-LUALIB_API void (luaL_checkversion_) (lua_State *L, lua_Number ver, size_t sz);
+LUALIB_API void (luaL_checkversion_) (lua_State *L, lua_Number ver, size_t sz) LUA_THROWS;
 #define luaL_checkversion(L)  \
 	  luaL_checkversion_(L, LUA_VERSION_NUM, LUAL_NUMSIZES)
 
-LUALIB_API int (luaL_getmetafield) (lua_State *L, int obj, const char *e);
-LUALIB_API int (luaL_callmeta) (lua_State *L, int obj, const char *e);
-LUALIB_API const char *(luaL_tolstring) (lua_State *L, int idx, size_t *len);
-LUALIB_API int (luaL_argerror) (lua_State *L, int arg, const char *extramsg);
+LUALIB_API int (luaL_getmetafield) (lua_State *L, int obj, const char *e) LUA_THROWS;
+LUALIB_API int (luaL_callmeta) (lua_State *L, int obj, const char *e) LUA_THROWS;
+LUALIB_API const char *(luaL_tolstring) (lua_State *L, int idx, size_t *len) LUA_THROWS;
+LUALIB_API int (luaL_argerror) (lua_State *L, int arg, const char *extramsg) LUA_THROWS;
 LUALIB_API const char *(luaL_checklstring) (lua_State *L, int arg,
-                                                          size_t *l);
+                                                          size_t *l) LUA_THROWS;
 LUALIB_API const char *(luaL_optlstring) (lua_State *L, int arg,
-                                          const char *def, size_t *l);
-LUALIB_API lua_Number (luaL_checknumber) (lua_State *L, int arg);
-LUALIB_API lua_Number (luaL_optnumber) (lua_State *L, int arg, lua_Number def);
+                                          const char *def, size_t *l) LUA_THROWS;
+LUALIB_API lua_Number (luaL_checknumber) (lua_State *L, int arg) LUA_THROWS;
+LUALIB_API lua_Number (luaL_optnumber) (lua_State *L, int arg, lua_Number def) LUA_THROWS;
 
-LUALIB_API lua_Integer (luaL_checkinteger) (lua_State *L, int arg);
+LUALIB_API lua_Integer (luaL_checkinteger) (lua_State *L, int arg) LUA_THROWS;
 LUALIB_API lua_Integer (luaL_optinteger) (lua_State *L, int arg,
-                                          lua_Integer def);
+                                          lua_Integer def) LUA_THROWS;
 
-LUALIB_API void (luaL_checkstack) (lua_State *L, int sz, const char *msg);
-LUALIB_API void (luaL_checktype) (lua_State *L, int arg, int t);
-LUALIB_API void (luaL_checkany) (lua_State *L, int arg);
+LUALIB_API void (luaL_checkstack) (lua_State *L, int sz, const char *msg) LUA_THROWS;
+LUALIB_API void (luaL_checktype) (lua_State *L, int arg, int t) LUA_THROWS;
+LUALIB_API void (luaL_checkany) (lua_State *L, int arg) LUA_THROWS;
 
-LUALIB_API int   (luaL_newmetatable) (lua_State *L, const char *tname);
-LUALIB_API void  (luaL_setmetatable) (lua_State *L, const char *tname);
-LUALIB_API void *(luaL_testudata) (lua_State *L, int ud, const char *tname);
-LUALIB_API void *(luaL_checkudata) (lua_State *L, int ud, const char *tname);
+LUALIB_API int   (luaL_newmetatable) (lua_State *L, const char *tname) LUA_THROWS;
+LUALIB_API void  (luaL_setmetatable) (lua_State *L, const char *tname) LUA_THROWS;
+LUALIB_API void *(luaL_testudata) (lua_State *L, int ud, const char *tname) LUA_THROWS;
+LUALIB_API void *(luaL_checkudata) (lua_State *L, int ud, const char *tname) LUA_THROWS;
 
-LUALIB_API void (luaL_where) (lua_State *L, int lvl);
-LUALIB_API int (luaL_error) (lua_State *L, const char *fmt, ...);
+LUALIB_API void (luaL_where) (lua_State *L, int lvl) LUA_THROWS;
+LUALIB_API int (luaL_error) (lua_State *L, const char *fmt, ...) LUA_THROWS;
 
 LUALIB_API int (luaL_checkoption) (lua_State *L, int arg, const char *def,
-                                   const char *const lst[]);
+                                   const char *const lst[]) LUA_THROWS;
 
-LUALIB_API int (luaL_fileresult) (lua_State *L, int stat, const char *fname);
-LUALIB_API int (luaL_execresult) (lua_State *L, int stat);
+LUALIB_API int (luaL_fileresult) (lua_State *L, int stat, const char *fname) LUA_THROWS;
+LUALIB_API int (luaL_execresult) (lua_State *L, int stat) LUA_THROWS;
 
 /* predefined references */
 #define LUA_NOREF       (-2)
 #define LUA_REFNIL      (-1)
 
-LUALIB_API int (luaL_ref) (lua_State *L, int t);
-LUALIB_API void (luaL_unref) (lua_State *L, int t, int ref);
+LUALIB_API int (luaL_ref) (lua_State *L, int t) LUA_THROWS;
+LUALIB_API void (luaL_unref) (lua_State *L, int t, int ref) LUA_THROWS;
 
 LUALIB_API int (luaL_loadfilex) (lua_State *L, const char *filename,
-                                               const char *mode);
+                                               const char *mode) LUA_THROWS;
 
 #define luaL_loadfile(L,f)	luaL_loadfilex(L,f,NULL)
 
@@ -89,20 +89,20 @@ LUALIB_API int (luaL_loadstring) (lua_State *L, const char *s);
 
 LUALIB_API lua_State *(luaL_newstate) (void);
 
-LUALIB_API lua_Integer (luaL_len) (lua_State *L, int idx);
+LUALIB_API lua_Integer (luaL_len) (lua_State *L, int idx) LUA_THROWS;
 
 LUALIB_API const char *(luaL_gsub) (lua_State *L, const char *s, const char *p,
-                                                  const char *r);
+                                                  const char *r) LUA_THROWS;
 
-LUALIB_API void (luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup);
+LUALIB_API void (luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup) LUA_THROWS;
 
-LUALIB_API int (luaL_getsubtable) (lua_State *L, int idx, const char *fname);
+LUALIB_API int (luaL_getsubtable) (lua_State *L, int idx, const char *fname) LUA_THROWS;
 
 LUALIB_API void (luaL_traceback) (lua_State *L, lua_State *L1,
-                                  const char *msg, int level);
+                                  const char *msg, int level) LUA_THROWS;
 
 LUALIB_API void (luaL_requiref) (lua_State *L, const char *modname,
-                                 lua_CFunction openf, int glb);
+                                 lua_CFunction openf, int glb) LUA_THROWS;
 
 /*
 ** ===============================================================
@@ -159,13 +159,13 @@ typedef struct luaL_Buffer {
 #define luaL_addsize(B,s)	((B)->n += (s))
 
 LUALIB_API void (luaL_buffinit) (lua_State *L, luaL_Buffer *B);
-LUALIB_API char *(luaL_prepbuffsize) (luaL_Buffer *B, size_t sz);
-LUALIB_API void (luaL_addlstring) (luaL_Buffer *B, const char *s, size_t l);
-LUALIB_API void (luaL_addstring) (luaL_Buffer *B, const char *s);
-LUALIB_API void (luaL_addvalue) (luaL_Buffer *B);
-LUALIB_API void (luaL_pushresult) (luaL_Buffer *B);
-LUALIB_API void (luaL_pushresultsize) (luaL_Buffer *B, size_t sz);
-LUALIB_API char *(luaL_buffinitsize) (lua_State *L, luaL_Buffer *B, size_t sz);
+LUALIB_API char *(luaL_prepbuffsize) (luaL_Buffer *B, size_t sz) LUA_THROWS;
+LUALIB_API void (luaL_addlstring) (luaL_Buffer *B, const char *s, size_t l) LUA_THROWS;
+LUALIB_API void (luaL_addstring) (luaL_Buffer *B, const char *s) LUA_THROWS;
+LUALIB_API void (luaL_addvalue) (luaL_Buffer *B) LUA_THROWS;
+LUALIB_API void (luaL_pushresult) (luaL_Buffer *B) LUA_THROWS;
+LUALIB_API void (luaL_pushresultsize) (luaL_Buffer *B, size_t sz) LUA_THROWS;
+LUALIB_API char *(luaL_buffinitsize) (lua_State *L, luaL_Buffer *B, size_t sz) LUA_THROWS;
 
 #define luaL_prepbuffer(B)	luaL_prepbuffsize(B, LUAL_BUFFERSIZE)
 
@@ -201,9 +201,9 @@ typedef struct luaL_Stream {
 #if defined(LUA_COMPAT_MODULE)
 
 LUALIB_API void (luaL_pushmodule) (lua_State *L, const char *modname,
-                                   int sizehint);
+                                   int sizehint) LUA_THROWS;
 LUALIB_API void (luaL_openlib) (lua_State *L, const char *libname,
-                                const luaL_Reg *l, int nup);
+                                const luaL_Reg *l, int nup) LUA_THROWS;
 
 #define luaL_register(L,n,l)	(luaL_openlib(L,(n),(l),0))
 

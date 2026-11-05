@@ -20,7 +20,8 @@ if ($Clean -and (Test-Path -LiteralPath $BuildRoot))
     Remove-Item -LiteralPath $BuildRoot -Recurse -Force
 }
 
-& cmake -S $PluginRoot -B $BuildRoot -G "Visual Studio 17 2022" -A x64
+# Let CMake select the installed Visual Studio, or honor CMAKE_GENERATOR.
+& cmake -S $PluginRoot -B $BuildRoot -A x64
 if ($LASTEXITCODE -ne 0)
 {
     throw "CMake configuration failed with exit code $LASTEXITCODE"
@@ -56,13 +57,33 @@ if ($LASTEXITCODE -ne 0 -or ($SmokeOutput -join "") -ne "Lua 5.3")
 }
 
 $CompilerPath = $null
+$CmakeGenerator = $null
 $CmakeCache = Join-Path $BuildRoot "CMakeCache.txt"
 foreach ($Line in Get-Content -LiteralPath $CmakeCache)
 {
     if ($Line -match '^CMAKE_CXX_COMPILER:FILEPATH=(.+)$')
     {
         $CompilerPath = $Matches[1]
-        break
+    }
+    if ($Line -match '^CMAKE_GENERATOR:INTERNAL=(.+)$')
+    {
+        $CmakeGenerator = $Matches[1]
+    }
+}
+if (-not $CompilerPath)
+{
+    $CompilerConfig = Get-ChildItem -Path (Join-Path $BuildRoot "CMakeFiles\*\CMakeCXXCompiler.cmake") -File |
+        Select-Object -First 1
+    if ($CompilerConfig)
+    {
+        foreach ($Line in Get-Content -LiteralPath $CompilerConfig.FullName)
+        {
+            if ($Line -match '^set\(CMAKE_CXX_COMPILER "([^"]+)"\)')
+            {
+                $CompilerPath = $Matches[1]
+                break
+            }
+        }
     }
 }
 $CompilerVersion = if ($CompilerPath -and (Test-Path -LiteralPath $CompilerPath))
@@ -71,13 +92,13 @@ $CompilerVersion = if ($CompilerPath -and (Test-Path -LiteralPath $CompilerPath)
 }
 else
 {
-    "Visual Studio 17 2022 (compiler path unavailable in CMake cache)"
+    "$CmakeGenerator (compiler path unavailable in CMake metadata)"
 }
 
 $Manifest = [ordered]@{
     schemaVersion = 1
     luaVersion = "5.3.4"
-    generator = "Visual Studio 17 2022"
+    generator = $CmakeGenerator
     architecture = "x64"
     configuration = $Configuration
     compilerVersion = $CompilerVersion

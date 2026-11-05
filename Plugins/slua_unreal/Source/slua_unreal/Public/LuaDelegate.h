@@ -52,7 +52,7 @@ public:
 protected:
     NS_SLUA::LuaVar* luafunction;
     
-    UFunction* ufunction;
+    TWeakObjectPtr<UFunction> ufunction;
 
     int64 handle;
 
@@ -85,9 +85,9 @@ namespace NS_SLUA {
 
         LuaDelegateWrapT(TBaseDelegate<R, ARGS...>& d) :delegate(d) {}
 #else
-        TDelegate<R, ARGS...>& delegate;
+        TDelegate<R(ARGS...)>& delegate;
 
-        LuaDelegateWrapT(TDelegate<R, ARGS...>& d) :delegate(d) {}
+        LuaDelegateWrapT(TDelegate<R(ARGS...)>& d) :delegate(d) {}
 #endif
     };
 
@@ -110,7 +110,7 @@ namespace NS_SLUA {
 #if (ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4)
         static int push(lua_State* L, TBaseDelegate<R, ARGS...>& delegate)
 #else
-        static int push(lua_State* L, TDelegate<R, ARGS...>& delegate)
+        static int push(lua_State* L, TDelegate<R(ARGS...)>& delegate)
 #endif
         {
             using T = LuaDelegateWrapT<R, ARGS...>;
@@ -177,7 +177,7 @@ namespace NS_SLUA {
 #if (ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4)
     int LuaObject::push(lua_State* L, TBaseDelegate<R, ARGS...>& delegate)
 #else
-    int LuaObject::push(lua_State* L, TDelegate<R, ARGS...>& delegate)
+    int LuaObject::push(lua_State* L, TDelegate<R(ARGS...)>& delegate)
 #endif
     {
         return LuaDelegate::push(L,delegate);

@@ -43,7 +43,7 @@ void ULuaDelegate::EventTrigger()
 }
 
 void ULuaDelegate::ProcessEvent( UFunction* f, void* Parms ) {
-    if (luafunction == nullptr || ufunction == nullptr) {
+    if (luafunction == nullptr || !ufunction.IsValid()) {
 #if WITH_EDITOR
         NS_SLUA::Log::Error("Can't remove lua delegate[%s] on trigger delegate!", TCHAR_TO_UTF8(*pName));
 #else
@@ -51,7 +51,8 @@ void ULuaDelegate::ProcessEvent( UFunction* f, void* Parms ) {
 #endif
         return;
     }
-    luafunction->callByUFunction(ufunction,reinterpret_cast<uint8*>(Parms));
+    NS_SLUA::LuaVar callback = *luafunction;
+    callback.callByUFunction(ufunction.Get(),reinterpret_cast<uint8*>(Parms));
 }
 
 void ULuaDelegate::bindFunction(NS_SLUA::lua_State* L,int p,UFunction* ufunc) {
@@ -113,6 +114,11 @@ int ULuaDelegate::removeLuaDelegateByHandle(NS_SLUA::lua_State* L, int64 handle)
         return 1;
     }
     auto obj = Cast<ULuaDelegate>(objPtr->Get());
+    if (!obj || !obj->luafunction || obj->luafunction->getState() != NS_SLUA::LuaState::get(L)->getLuaState())
+    {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
     removeLuaDelegate(L, obj);
 
     lua_pushboolean(L, 1);
@@ -147,6 +153,8 @@ namespace NS_SLUA {
 
     int LuaMultiDelegate::Add(lua_State* L) {
         CheckUD(LuaMultiDelegateWrap,L,1);
+        if (!LuaFunctionAccelerator::IsValid(UD->funcAcc))
+            return luaL_error(L, "Delegate function accelerator is invalid");
 
         int type = lua_type(L, 2);
         switch (type)
@@ -323,6 +331,8 @@ namespace NS_SLUA {
 
     int LuaMultiDelegate::Broadcast(lua_State* L) {
         CheckUD(LuaMultiDelegateWrap,L,1);
+        if (!LuaFunctionAccelerator::IsValid(UD->funcAcc))
+            return luaL_error(L, "Delegate function accelerator is invalid");
 
         auto callBroadcast = [UD, L](const FMulticastScriptDelegate* delegate)
         {
@@ -426,6 +436,8 @@ namespace NS_SLUA {
     int LuaDelegate::Bind(lua_State* L)
     {
         CheckUD(LuaDelegateWrap, L, 1);
+        if (!LuaFunctionAccelerator::IsValid(UD->funcAcc))
+            return luaL_error(L, "Delegate function accelerator is invalid");
 
         // clear old delegate object
         if(UD) clear(L,UD);
@@ -483,6 +495,8 @@ namespace NS_SLUA {
     int LuaDelegate::Execute(lua_State* L)
     {
         CheckUD(LuaDelegateWrap, L, 1);
+        if (!LuaFunctionAccelerator::IsValid(UD->funcAcc))
+            return luaL_error(L, "Delegate function accelerator is invalid");
         if (!UD->delegate->IsBound())
         {
             return 0;

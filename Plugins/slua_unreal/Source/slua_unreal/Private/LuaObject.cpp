@@ -127,8 +127,6 @@ namespace NS_SLUA {
         if (isRef)
             return;
         
-        if (uss->StructFlags & CPF_IsPlainOldData)
-            return;
         
         LuaReference::addRefByStruct(Collector, uss, buf);
     }
@@ -830,7 +828,11 @@ namespace NS_SLUA {
 
         auto* table = ULuaOverrider::getObjectLuaTable(obj, L);
         if (table && table->getState() == L->l_G->mainthread) {
-            LuaVar luaFunc = ULuaOverrider::getLuaFunction(L, obj, table, func->GetName());
+            LuaVar luaFunc;
+            FString Error;
+            if (ULuaOverrider::getLuaFunction(L, obj, table, func->GetName(), luaFunc, Error) != LUA_OK) {
+                return luaL_error(L, "%s", TCHAR_TO_UTF8(*Error));
+            }
             if (luaFunc.isFunction()) {
                 int resultTop = lua_gettop(L);
                 luaFunc.push(L);
@@ -857,6 +859,8 @@ namespace NS_SLUA {
         if(!ud) luaL_error(L, "Call ufunction error");
 
         auto* funcAcc = reinterpret_cast<LuaFunctionAccelerator*>(ud);
+        if (!LuaFunctionAccelerator::IsValid(funcAcc))
+            return luaL_error(L, "UFunction accelerator is invalid");
         auto func = funcAcc->func;
 #if !UE_BUILD_SHIPPING
         //PROFILER_WATCHER_X(ufuncClosure, TCHAR_TO_UTF8(*FString::Printf(TEXT("%s::%s"), *func->GetOuterUClass()->GetName(), *func->GetName())));
@@ -1931,7 +1935,7 @@ namespace NS_SLUA {
             for (int32 index = 0; index < elementCount; ++index)
             {
                 lua_rawgeti(L, tableIndex, index + 1);
-                checker(L, p->Inner, arrayHelper.GetRawPtr(index), -1, bForceCopy);
+                checker(L, p->Inner, arrayHelper.GetRawPtr(index), -1, true);
                 lua_pop(L, 1);
             }
             return nullptr;
@@ -1941,11 +1945,7 @@ namespace NS_SLUA {
         if (type == LUA_TSTRING && LuaObject::isBinStringProperty(p->Inner)) {
             size_t len;
             uint8* content = (uint8*)lua_tolstring(L, i, &len);
-#if ENGINE_MAJOR_VERSION==5
-            scriptArray->Add((int32)len, 1, GetPropertyAlignment(p->Inner));
-#else
-            scriptArray->Add((int32)len, 1);
-#endif
+            FScriptArrayHelper(p, parms).Resize((int32)len);
             uint8* dest = (uint8*)scriptArray->GetData();
             FMemory::Memcpy(dest, content, len);
             return nullptr;
@@ -1984,6 +1984,7 @@ namespace NS_SLUA {
             }
             
             FScriptMapHelper mapHelper(p, parms);
+            mapHelper.EmptyValues();
 
             lua_pushnil(L);
             while (lua_next(L, tableIndex) != 0) {
@@ -1993,8 +1994,8 @@ namespace NS_SLUA {
                 auto valuePtr = tempValue.GetObjAddress();
                 auto keyChecker = LuaObject::getChecker(p->KeyProp);
                 auto valueChecker = LuaObject::getChecker(p->ValueProp);
-                keyChecker(L, p->KeyProp, (uint8*)keyPtr, -2, bForceCopy);
-                valueChecker(L, p->ValueProp, (uint8*)valuePtr, -1, bForceCopy);
+                keyChecker(L, p->KeyProp, (uint8*)keyPtr, -2, true);
+                valueChecker(L, p->ValueProp, (uint8*)valuePtr, -1, true);
                 mapHelper.AddPair(keyPtr, valuePtr);
                 lua_pop(L, 1);
             }
@@ -2037,6 +2038,7 @@ namespace NS_SLUA {
             }
 
             FScriptSetHelper SetHelper(p, params);
+            SetHelper.EmptyElements();
 
             lua_pushnil(L);
 
@@ -2045,7 +2047,7 @@ namespace NS_SLUA {
             while (lua_next(L, tableIndex) != 0) {
                 FDefaultConstructedPropertyElement TempInElement(p->ElementProp);
                 const auto ElementPtr = TempInElement.GetObjAddress();
-                ElementChecker(L, p->ElementProp, static_cast<uint8*>(ElementPtr), -1, bForceCopy);
+                ElementChecker(L, p->ElementProp, static_cast<uint8*>(ElementPtr), -1, true);
                 SetHelper.AddElement(ElementPtr);
                 lua_pop(L, 1);
             }

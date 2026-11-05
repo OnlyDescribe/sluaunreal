@@ -134,13 +134,7 @@ namespace NS_SLUA {
     void LuaArray::clear() {
         if(!inner) return;
 
-        if (!isRef) {
-            uint8 *Dest = getRawPtr(0);
-            for (int32 i = 0; i < array->Num(); i++, Dest += GetPropertyElementSize(inner))
-            {
-                inner->DestroyValue(Dest);
-            }
-        }
+        destructItems(0, array->Num());
 #if ENGINE_MAJOR_VERSION==5
         array->Empty(0, GetPropertyElementSize(inner), GetPropertyAlignment(inner));
 #else
@@ -162,6 +156,8 @@ namespace NS_SLUA {
             Collector.AddReferencedObject(ownerObject);
 #endif
         }
+
+        if (inner && isNewInner) inner->AddReferencedObjects(Collector);
 
         // if empty or owner object had been collected
         // AddReferencedObject will auto null propObj
@@ -224,8 +220,6 @@ namespace NS_SLUA {
     }
 
     void LuaArray::destructItems(int index,int count) {
-        // if array is owned by uobject, don't destructItems
-        if(isRef) return;
         if (!(inner->PropertyFlags & (CPF_IsPlainOldData | CPF_NoDestructor)))
         {
             uint8 *Dest = getRawPtr(index);

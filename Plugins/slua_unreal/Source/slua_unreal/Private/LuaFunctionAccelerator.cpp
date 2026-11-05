@@ -35,6 +35,12 @@ namespace
 namespace NS_SLUA
 {
     TMap<UFunction*, LuaFunctionAccelerator*> LuaFunctionAccelerator::cache;
+    TSet<LuaFunctionAccelerator*> LuaFunctionAccelerator::ValidAccels;
+
+    bool LuaFunctionAccelerator::IsValid(LuaFunctionAccelerator* Accel)
+    {
+        return ValidAccels.Contains(Accel);
+    }
 
     inline bool isLatentProperty(FProperty* prop)
     {
@@ -168,6 +174,7 @@ namespace NS_SLUA
         
         auto value = new LuaFunctionAccelerator(inFunc);
         cache.Emplace(inFunc, value);
+        ValidAccels.Add(value);
         return value;
     }
 
@@ -176,6 +183,7 @@ namespace NS_SLUA
         auto funcPtr = cache.Find(inFunc);
         if (funcPtr)
         {
+            ValidAccels.Remove(*funcPtr);
             delete *funcPtr;
             cache.Remove(inFunc);
             return true;
@@ -192,6 +200,7 @@ namespace NS_SLUA
         }
 
         cache.Empty();
+        ValidAccels.Empty();
     }
 
     struct LuaFunctionAccelerator::FProtectedCallContext
@@ -200,22 +209,28 @@ namespace NS_SLUA
         UObject* object;
         NewObjectRecorder* objectRecorder;
         uint8* params;
-        FProperty** nextParamProperty;
+        FProperty** propertyList;
         PTRINT* outParams;
         FFrame* stack;
+        AutoLocalDestructor* localDestructor;
         bool* isLatentFunction;
-        int argumentCount;
-        int nextArgumentIndex;
+        bool entryYieldable;
+        bool addedThreadRef = false;
+        bool invokeCompleted = false;
     };
 
-    int LuaFunctionAccelerator::protectedFillParams(lua_State* L)
+    int LuaFunctionAccelerator::protectedCall(lua_State* L)
     {
         FProtectedCallContext* context = static_cast<FProtectedCallContext*>(
-            lua_touserdata(L, lua_upvalueindex(1)));
-        check(context && context->accelerator);
+            lua_touserdata(L, -1));
+        check(context && context->accelerator && context->stack);
+        lua_pop(L, 1);
 
+        LuaFunctionAccelerator* accelerator = context->accelerator;
+        const int argumentCount = lua_gettop(L);
+        FProperty** nextParamProperty = context->propertyList;
         int argumentIndex = 1;
-        for (FCheckerInfo& checkerInfo : context->accelerator->paramsChecker)
+        for (FCheckerInfo& checkerInfo : accelerator->paramsChecker)
         {
             FProperty* prop = checkerInfo.prop;
             if (checkerInfo.bInit && !(checkerInfo.bReference && lua_type(L, argumentIndex) == LUA_TUSERDATA))
@@ -224,19 +239,24 @@ namespace NS_SLUA
                 {
                     prop->InitializeValue_InContainer(context->params);
                 }
-                *context->nextParamProperty = prop;
-                ++context->nextParamProperty;
+                *nextParamProperty = prop;
+                ++nextParamProperty;
             }
 
             if (checkerInfo.bLatent)
             {
+                if (!context->entryYieldable)
+                    return luaL_error(L, "latent UFunction requires a yieldable coroutine");
                 lua_State* mainThread = L->l_G->mainthread;
                 ULatentDelegate* latentObject = LuaObject::getLatentDelegate(mainThread);
+                const bool hadThreadRef = LuaState::get(L)->findThread(L) != LUA_REFNIL;
                 const int threadRef = latentObject ? latentObject->getThreadRef(L) : LUA_REFNIL;
                 if (threadRef == LUA_REFNIL || threadRef == LUA_NOREF)
                 {
                     return luaL_error(L, "latent UFunction must be called from a live coroutine");
                 }
+                // A reused registration belongs to the coroutine, including its active native resume.
+                context->addedThreadRef |= !hadThreadRef;
 
                 FLatentActionInfo latentActionInfo(threadRef, GetTypeHash(FGuid::NewGuid()),
                     *ULatentDelegate::NAME_LatentCallback, latentObject);
@@ -260,17 +280,7 @@ namespace NS_SLUA
             }
         }
 
-        context->nextArgumentIndex = argumentIndex;
-        return 0;
-    }
-
-    int LuaFunctionAccelerator::protectedInvoke(lua_State* L)
-    {
-        FProtectedCallContext* context = static_cast<FProtectedCallContext*>(
-            lua_touserdata(L, lua_upvalueindex(1)));
-        check(context && context->accelerator && context->stack);
-
-        LuaFunctionAccelerator* accelerator = context->accelerator;
+        context->localDestructor->Initialize();
         UFunction* function = accelerator->func;
         const EFunctionFlags functionFlags = function->FunctionFlags;
         uint8* returnValueAddress = accelerator->bHasReturnParam
@@ -312,22 +322,16 @@ namespace NS_SLUA
             function->Invoke(context->object, *context->stack, returnValueAddress);
         }
 
-        return 0;
-    }
+        context->invokeCompleted = true;
+        context->localDestructor->Destroy();
 
-    int LuaFunctionAccelerator::protectedPushResults(lua_State* L)
-    {
-        FProtectedCallContext* context = static_cast<FProtectedCallContext*>(
-            lua_touserdata(L, lua_upvalueindex(1)));
-        check(context && context->accelerator);
-
-        LuaFunctionAccelerator* accelerator = context->accelerator;
+        luaL_checkstack(L, accelerator->outPropsPusher.Num() + LUA_MINSTACK, "UFunction outputs");
         int32 returnCount = 0;
         if (accelerator->bHasReturnParam)
         {
             const FPusherInfo& returnInfo = accelerator->returnPusherInfo;
-            const int reusableArgument = context->nextArgumentIndex <= context->argumentCount
-                ? context->nextArgumentIndex
+            const int reusableArgument = argumentIndex <= argumentCount
+                ? argumentIndex
                 : 0;
             returnCount += returnInfo.pusher(L, returnInfo.prop,
                 context->params + returnInfo.offset, reusableArgument, context->objectRecorder);
@@ -363,10 +367,9 @@ namespace NS_SLUA
             return 0;
         }
 
-        int i = offset;
-        uint16 propertiesSize = func->PropertiesSize;
-        uint8* params = (uint8*)FMemory_Alloca(propertiesSize);
-        uint16 paramsPointerSize = func->NumParms * sizeof(void*);
+        const int32 propertiesSize = func->GetStructureSize();
+        uint8* params = (uint8*)FMemory_Alloca_Aligned(propertiesSize, func->GetMinAlignment());
+        const SIZE_T paramsPointerSize = func->NumParms * sizeof(void*);
         FProperty** propertyList = (FProperty**)FMemory_Alloca(paramsPointerSize);
         PTRINT* outParams = (PTRINT*)FMemory_Alloca(paramsPointerSize);
 
@@ -415,6 +418,12 @@ namespace NS_SLUA
 
         const int originalArgumentCount = lua_gettop(L);
         const int protectedArgumentCount = FMath::Max(originalArgumentCount - offset + 1, 0);
+        if (!lua_checkstack(L, protectedArgumentCount + 2))
+        {
+            lua_pushliteral(L, "insufficient stack for UFunction arguments");
+            return -1;
+        }
+        AutoLocalDestructor localDestructor(func, params);
         FProtectedCallContext context = {
             this,
             obj,
@@ -423,54 +432,32 @@ namespace NS_SLUA
             propertyList,
             outParams,
             &newStack,
+            &localDestructor,
             &isLatentFunction,
-            protectedArgumentCount,
-            1
+            lua_isyieldable(L) != 0
         };
 
-        auto callProtected = [&](lua_CFunction protectedFunction, bool bCopyArguments, int resultCount)
+        // The context is borrowed only for this synchronous call; no per-call closure is needed.
+        lua_pushcfunction(L, &LuaFunctionAccelerator::protectedCall);
+        for (int argumentIndex = offset; argumentIndex <= originalArgumentCount; ++argumentIndex)
         {
-            lua_pushlightuserdata(L, &context);
-            lua_pushcclosure(L, protectedFunction, 1);
-            int copiedArgumentCount = 0;
-            if (bCopyArguments)
-            {
-                for (int argumentIndex = offset; argumentIndex <= originalArgumentCount; ++argumentIndex)
-                {
-                    lua_pushvalue(L, argumentIndex);
-                    ++copiedArgumentCount;
-                }
-            }
-            return lua_pcall(L, copiedArgumentCount, resultCount, 0);
-        };
-
-        if (callProtected(&LuaFunctionAccelerator::protectedFillParams, true, 0) != LUA_OK)
-        {
-            return -1;
+            lua_pushvalue(L, argumentIndex);
         }
-
-        AutoLocalDestructor localDestructor(func, params);
-        localDestructor.Initialize();
-#if WITH_DEV_AUTOMATION_TESTS
-        lastLocalInitializedCount = localDestructor.initializedCount;
-#endif
-        const int invokeStatus = callProtected(&LuaFunctionAccelerator::protectedInvoke, false, 0);
+        lua_pushlightuserdata(L, &context);
+        const int status = lua_pcall(L, protectedArgumentCount + 1, LUA_MULTRET, 0);
         localDestructor.Destroy();
 #if WITH_DEV_AUTOMATION_TESTS
+        lastLocalInitializedCount = localDestructor.initializedCount;
         lastLocalDestroyedCount = localDestructor.destroyedCount;
 #endif
-        if (invokeStatus != LUA_OK)
+        if (status != LUA_OK)
         {
+            // Output conversion can fail after a native latent action has already been submitted.
+            if (context.addedThreadRef && !context.invokeCompleted) LuaState::get(L)->removeThread(L);
             return -1;
         }
 
-        const int stackTopBeforeResults = lua_gettop(L);
-        if (callProtected(&LuaFunctionAccelerator::protectedPushResults, true, LUA_MULTRET) != LUA_OK)
-        {
-            return -1;
-        }
-
-        return lua_gettop(L) - stackTopBeforeResults;
+        return lua_gettop(L) - originalArgumentCount;
     }
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -489,15 +476,15 @@ namespace NS_SLUA
         UFunction* function = NewObject<UFunction>(UObject::StaticClass(), FunctionName, RF_Transient);
         function->FunctionFlags = FUNC_Native | FUNC_HasDefaults;
 
-        FStructProperty* structLocal = new FStructProperty(function, TEXT("StructLocal"), RF_Public);
+        FStructProperty* structLocal = new FStructProperty(function, TEXT("StructLocal"));
         structLocal->Struct = TBaseStructure<FSoftObjectPath>::Get();
         function->AddCppProperty(structLocal);
 
-        FArrayProperty* arrayLocal = new FArrayProperty(function, TEXT("ArrayLocal"), RF_Public);
-        arrayLocal->AddCppProperty(new FStrProperty(arrayLocal, TEXT("Inner"), RF_Public));
+        FArrayProperty* arrayLocal = new FArrayProperty(function, TEXT("ArrayLocal"));
+        arrayLocal->AddCppProperty(new FStrProperty(arrayLocal, TEXT("Inner")));
         function->AddCppProperty(arrayLocal);
 
-        FStrProperty* stringLocal = new FStrProperty(function, TEXT("StringLocal"), RF_Public);
+        FStrProperty* stringLocal = new FStrProperty(function, TEXT("StringLocal"));
         function->AddCppProperty(stringLocal);
         function->StaticLink(true);
         function->SetNativeFunc(&FunctionLocalLifetimeProbe);
@@ -533,9 +520,9 @@ namespace NS_SLUA
 #endif
 
     void LuaFunctionAccelerator::fillParam(lua_State* L,int i, NewObjectRecorder* objRecorder,const PostFillParamCallback& callback ,bool &isLatentFunction) {
-        uint16 paramsPointerSize = func->NumParms * sizeof(void*);
+        const SIZE_T paramsPointerSize = func->NumParms * sizeof(void*);
         uint16 parmsSize = func->ParmsSize;
-        uint8* params = (uint8*)FMemory_Alloca(parmsSize);
+        uint8* params = (uint8*)FMemory_Alloca_Aligned(parmsSize, func->GetMinAlignment());
         FProperty** propertyList = (FProperty**)FMemory_Alloca(paramsPointerSize);
         PTRINT* outParams = (PTRINT*)FMemory_Alloca(paramsPointerSize);
         if (parmsSize)
