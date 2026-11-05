@@ -323,7 +323,8 @@ namespace NS_SLUA {
 
         // cache ufunction/uproperty ptr if index by lua
         struct ClassCache {
-            typedef TMap<SimpleString, FProperty*> CachePropItem;
+            // Property identity is FName-based even when packaged builds do not preserve spelling case.
+            typedef TMap<FName, FProperty*> CachePropItem;
             typedef TMap<UStruct*, CachePropItem> CachePropMap;
             
             FProperty* findProp(UStruct* ustruct, const char* pname);

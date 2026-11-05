@@ -205,10 +205,15 @@ namespace NS_SLUA {
             // UE 5.7 removed ANY_PACKAGE-compatible search paths. FindFirstObject
             // searches across loaded packages and preserves the old import semantics.
             UClass* uclass = FindFirstObject<UClass>(*path, EFindFirstObjectOptions::NativeFirst);
-            if (!uclass) {
-                // Try to load then retry (handles asset-based classes not yet in memory)
-                LoadObject<UObject>(NULL, *path);
-                uclass = FindFirstObject<UClass>(*path, EFindFirstObjectOptions::NativeFirst);
+            UScriptStruct* ustruct = uclass ? nullptr : FindFirstObject<UScriptStruct>(*path, EFindFirstObjectOptions::NativeFirst);
+            UEnum* uenum = (uclass || ustruct) ? nullptr : FindFirstObject<UEnum>(*path, EFindFirstObjectOptions::NativeFirst);
+            if (!uclass && !ustruct && !uenum) {
+                // Only unresolved types need an asset load. A loaded enum/struct
+                // is not a missing class and must not generate a failed-load warning.
+                UObject* loaded = LoadObject<UObject>(NULL, *path);
+                uclass = Cast<UClass>(loaded);
+                ustruct = Cast<UScriptStruct>(loaded);
+                uenum = Cast<UEnum>(loaded);
             }
             if (uclass) {
                 LuaObject::pushClass(L, uclass);
@@ -216,14 +221,12 @@ namespace NS_SLUA {
                 return 1;
             }
 
-            UScriptStruct* ustruct = FindFirstObject<UScriptStruct>(*path, EFindFirstObjectOptions::NativeFirst);
             if (ustruct) {
                 LuaObject::pushStruct(L, ustruct);
                 state->cacheImportedMap.Add(name, ImportedObjectCache {ustruct, ImportedStruct});
                 return 1;
             }
 
-            UEnum* uenum = FindFirstObject<UEnum>(*path, EFindFirstObjectOptions::NativeFirst);
             if (uenum) {
                 LuaObject::pushEnum(L, uenum);
                 state->cacheImportedMap.Add(name, ImportedObjectCache{ uenum, ImportedEnum });
@@ -1530,16 +1533,17 @@ namespace NS_SLUA {
 #endif
             if (scriptStruct && !scriptStruct->IsNative()) {
                 for (FProperty* prop = propertyLink; prop != nullptr; prop = prop->PropertyLinkNext) {
-                    item->Add(TCHAR_TO_UTF8(*getPropertyFriendlyName(prop)), prop);
+                    item->Add(FName(*getPropertyFriendlyName(prop)), prop);
                 }
             }
             else {
                 for (FProperty* prop = propertyLink; prop != nullptr; prop = prop->PropertyLinkNext) {
-                    item->Add(TCHAR_TO_UTF8(*prop->GetName()), prop);
+                    item->Add(prop->GetFName(), prop);
                 }
             }
         }
-        auto prop = item->Find(pname);
+        // Unknown script members must not allocate permanent entries in the name pool.
+        auto prop = item->Find(FName(UTF8_TO_TCHAR(pname), FNAME_Find));
         if (prop != nullptr)
             return *prop;
         return nullptr;

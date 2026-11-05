@@ -2444,20 +2444,34 @@ namespace NS_SLUA {
     
     bool fillUStructWithTable(lua_State* L, FStructProperty* prop, uint8* params, int i) {
         check(lua_istable(L, i));
-
+        AutoStack stack(L);
+        const int tableIndex = lua_absindex(L, i);
         auto uss = prop->Struct;
+        TSet<FProperty*> assignedProperties;
 
-        for (TFieldIterator<FProperty> it(uss); it; ++it) {
-            AutoStack as(L);
-            FString fieldName = getPropertyFriendlyName(*it);
-            if (lua_getfield(L, i, TCHAR_TO_UTF8(*fieldName)) == LUA_TNIL) {
-                continue;
+        lua_pushnil(L);
+        while (lua_next(L, tableIndex) != 0) {
+            if (lua_type(L, -2) != LUA_TSTRING) {
+                luaL_error(L, "struct %s requires string field names", TCHAR_TO_UTF8(*uss->GetName()));
             }
-            
-            auto checker = LuaObject::getChecker(*it);
-            if (checker) {
-                checker(L, *it, it->ContainerPtrToValuePtr<uint8>(params), -1, true);
+            const char* fieldName = lua_tostring(L, -2);
+            FProperty* field = LuaObject::findCacheProperty(L, uss, fieldName);
+            if (!field) {
+                luaL_error(L, "unknown field '%s' in struct %s", fieldName, TCHAR_TO_UTF8(*uss->GetName()));
             }
+            if (assignedProperties.Contains(field)) {
+                luaL_error(L, "duplicate field '%s' in struct %s", fieldName, TCHAR_TO_UTF8(*uss->GetName()));
+            }
+            assignedProperties.Add(field);
+            auto checker = LuaObject::getChecker(field);
+            if (!checker) {
+                luaL_error(L, "unsupported field '%s' in struct %s", fieldName, TCHAR_TO_UTF8(*uss->GetName()));
+            }
+            {
+                AutoStack fieldStack(L);
+                checker(L, field, field->ContainerPtrToValuePtr<uint8>(params), -1, true);
+            }
+            lua_pop(L, 1);
         }
 
         return true;
