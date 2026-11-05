@@ -1,76 +1,45 @@
-# Local modifications to vendored Lua sources
+# Vendored Lua changes
 
-These files were copied from upstream Lua 5.3 and modified locally to fit the
-KeyGame slua_unreal integration. This file documents the diffs from upstream so
-future upgrades can re-apply or audit them.
+The runtime is Lua 5.3.4 compiled as C++ inside the `NS_SLUA` namespace.
+Keep the upstream Lua and LuaSocket notices in the repository's `LICENSE.TXT`.
+The source archive, module declarations and CLI must use the same ABI settings.
 
-## `luaconf.h`
+## Win64 API ownership
 
-- **Commit:** `a8bfec2` (initial), updated for LUA_STATIC_LINK ordering fix.
-- **Change:** Added a `LUA_STATIC_LINK` branch and reordered the top-level
-  `LUA_API` macro chain so that `LUA_STATIC_LINK` is matched **before**
-  `LUA_BUILD_AS_DLL`. Final order:
-  1. `LUA_STATIC_LINK`  → plain `extern "C"` / `extern` (no dll attributes).
-  2. `LUA_BUILD_AS_DLL` + (`LUA_CORE` | `LUA_LIB`) → `__declspec(dllexport)`.
-  3. `LUA_BUILD_AS_DLL` (consumer)                 → `__declspec(dllimport)`.
-  4. (none)                                        → `extern`.
-- **Why the ordering matters:** The CMake build defines **both**
-  `LUA_BUILD_AS_DLL` and `LUA_STATIC_LINK` on the `lua` and `lua_cli` targets
-  (see `Plugins/slua_unreal/CMakeLists.txt`). With the old ordering the
-  inner `LUA_BUILD_AS_DLL` / `LUA_CORE` branch hit first and produced a
-  `lua.lib` whose Lua C API symbols carried `__declspec(dllexport)` and a
-  `lua_cli.exe` whose references resolved as `__declspec(dllimport)` — the
-  latter could not link standalone. Putting `LUA_STATIC_LINK` first makes
-  the archive a "normal" static library (plain extern symbols), which
-  satisfies both `lua_cli` (resolves locally) and slua_unreal (re-exports
-  via `LuaExports.cpp`, see below).
-- **slua_unreal module build:** Compiled with `LUA_BUILD_AS_DLL` (public) and
-  `LUA_CORE` (private). `LUA_STATIC_LINK` is **not** defined here, so the
-  declarations slua_unreal sees in its own TUs are `dllexport` (LUA_CORE
-  branch). The actual symbol *definitions* come from lua.lib (plain
-  extern), so MSVC will not auto-emit them onto the slua_unreal.dll export
-  table; that is what `Source/slua_unreal/Private/LuaExports.cpp` solves
-  with `/EXPORT:` linker pragmas (required for EmmyLua attach-to-process).
-- **Downstream consumers:** Game modules link only `LUA_BUILD_AS_DLL` (no
-  LUA_CORE), so their declarations are `dllimport` and resolve against the
-  symbols slua_unreal.dll exports.
-- **Coupled definitions** (see `slua_unreal.Build.cs`):
-  - Wrapped in `#if UE_4_21_OR_LATER` to use
-    `PublicDefinitions.Add("LUA_BUILD_AS_DLL=1")` /
-    `PrivateDefinitions.Add("LUA_CORE=1")`; older engines (UE 4.18–4.20)
-    fall back to `Definitions.Add(...)`.
-  - `LUA_CORE` is kept *private* so that downstream modules importing
-    slua_unreal do not redefine it and accidentally flip `LUA_API` to
-    `dllexport` on the consumer side.
-- **EmmyLua context:** Required to make the EmmyLua VS Code debugger work
-  via the attach-to-process workflow, which expects Lua C API symbols to
-  be exported from the host module (slua_unreal.dll).
+`luaconf.h` gives `LUA_STATIC_LINK` precedence over `LUA_BUILD_AS_DLL`.
+The CMake archive and CLI define both, so their Lua C API symbols use plain
+`extern "C"` declarations. In a modular UE Win64 target, `slua_unreal` defines
+`LUA_BUILD_AS_DLL` publicly and `LUA_CORE` privately; consumers import the API
+from the plugin DLL. `Private/LuaExports.cpp` explicitly exports the symbols
+listed in `Tools/Win64LuaExports.txt`. Monolithic Win64 targets instead define
+`LUA_STATIC_LINK` and link the archive into the executable.
 
-## `lua.cpp`
+The `slua_lua` external module is a private dependency of `slua_unreal`.
+Making it a public dependency would allow consumers to acquire another copy
+of the Lua implementation. `LUA_CORE` must also remain private.
 
-- **Commit:** `7f173e8`
-- **Change:** Verbatim copy of the upstream Lua 5.3 `lua.c` REPL entry point,
-  renamed to `lua.cpp` and wrapped with `using namespace NS_SLUA;` so the
-  `lua_State` / API symbols resolve to slua's namespaced declarations.
-- **Reason:** Needed only by the standalone `lua_cli` executable produced by
-  the CMake project under `Plugins/slua_unreal/CMakeLists.txt` for offline
-  scripting / wrapper-generation tooling.
-- **Scope:** This file is **not** part of the UE module build
-  (`slua_unreal.Build.cs` does not pull it in). It only ships through the
-  CMake target.
+## C++ error unwinding
 
-## Maintenance notes
+Public Lua APIs which can propagate a Lua error or yield use `LUA_THROWS`
+(`noexcept(false)` in C++, empty in C). Declarations and definitions carry
+the same specification. This keeps the Win64 C export names while preventing
+MSVC `/EHsc` from assuming that these C-linkage calls cannot unwind native
+objects. The C++ VM uses the existing exception path in `ldo.cpp`; keep the
+UE module's exception support enabled. Non-raising APIs retain their original
+declarations rather than receiving a blanket annotation.
 
-- When pulling a new upstream Lua release, re-apply the `LUA_API` shim in
-  `luaconf.h` (with `LUA_STATIC_LINK` listed **first**) and re-vendor
-  `lua.cpp` from the new `lua.c`.
-- Keep `LUA_CORE` strictly in `PrivateDefinitions` to avoid leaking core-build
-  semantics into modules that link against `slua_unreal`.
-- The current `Library/Win64/lua.lib` was rebuilt with the CMake target's
-  `LUA_BUILD_AS_DLL + LUA_STATIC_LINK` definitions. Under the reordered
-  `luaconf.h` chain that produces an archive with **plain extern** symbols,
-  which is the desired state. No rebuild required after the reordering fix
-  (the binary already matches the new semantic).
-- If the `LUA_STATIC_LINK` define is ever removed from CMake, lua.lib will
-  go back to `__declspec(dllexport)` symbols and `LuaExports.cpp` becomes
-  redundant (but remains harmless).
+## Standalone CLI
+
+`lua.cpp` is the upstream REPL entry point adapted to the namespaced APIs.
+Only the CMake `lua_cli` target compiles it; the UE runtime module does not.
+The CLI executable is generated locally and excluded from Git.
+
+## Rebuilding and validation
+
+Use `Tools/build_win64_lua.ps1` and review `Library/Win64/BUILD-MANIFEST.json`
+with the archive. The manifest records the actual configuration, definitions,
+compiler version and archive/CLI hashes. `Tools/verify_win64_artifacts.ps1`
+checks those hashes, DLL exports and the CLI smoke test after a host build.
+Build redistributed artifacts in a standalone plugin checkout so debug records
+do not embed a consuming game's source path. The checked-in archive does not
+make other platform libraries or native debugger attachment verified.

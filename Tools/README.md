@@ -1,19 +1,21 @@
-## KeyGame / UE 5.7 and 5.8 reproducible workflow
+# UE 5.7 and 5.8 reproducible workflow
 
 Do not run `lua-wrapper.exe` directly. The checked-in `config.json` is a
 machine-independent template; the PowerShell entry point injects the Engine,
 project, MSVC and Windows SDK paths into a temporary config.
 
 ```powershell
-# From the host project's root; configure KEY_ENGINE_ROOT locally first.
-$projectRoot = (Get-Location).Path
-$engineRoot = python Tools/unreal.py root
-if ($LASTEXITCODE -ne 0) { throw 'Configure the pinned engine before generating wrappers.' }
-Set-Location Plugins/sluaunreal/Tools
-.\generate_wrapper.ps1 -EngineRoot $engineRoot -ProjectRoot $projectRoot -VerifyDeterministic
-.\build_win64_lua.ps1 -Clean
-.\verify_win64_artifacts.ps1
+# Run from this repository; supply a matching source engine and host project.
+$engineRoot = '<UE source root>'
+$projectRoot = '<host project directory>'
+./Tools/generate_wrapper.ps1 -EngineRoot $engineRoot -ProjectRoot $projectRoot -VerifyDeterministic
+./Tools/build_win64_lua.ps1
+./Tools/verify_win64_artifacts.ps1 -SluaDll '<built host slua DLL>'
 ```
+
+The host directory must contain exactly one `.uproject`; its name is arbitrary.
+No host-specific Python entry point, environment variable or module is required.
+Use `build_win64_lua.ps1 -Clean` only when replacing the local CMake build cache.
 
 First generate project files using the selected engine's `GenerateProjectFiles.bat`.
 `generate_wrapper.ps1` writes the wrapper pair for that engine's minor version,
@@ -42,6 +44,31 @@ to its selected generator; use a fresh build directory when changing it.
 Compilation selects the matching UE 5.7 or 5.8 wrapper. Other engine versions
 require a new generated pair and validation. Regenerate whenever engine headers
 or the wrapper export configuration changes; do not hand-edit generated output.
+
+## Native regression tests
+
+Build an Editor host with `Plugins/slua_unreal` enabled, then run the plugin's
+standalone regression suite in a fresh process:
+
+```powershell
+& "$engineRoot/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" '<host .uproject>' `
+    -unattended -NullRHI -nosound -nosplash -culture=en `
+    '-ExecCmds=Automation RunTests Slua.Runtime' `
+    '-TestExit=Automation Test Queue Empty' '-ReportExportPath=<report directory>'
+```
+
+The suite covers reflected calls, latent failure cleanup, borrowed containers,
+struct references, empty-container metadata and profiler shutdown. Tests are
+source-controlled and guarded by `WITH_DEV_AUTOMATION_TESTS`. They use UE Engine
+types and do not require a particular game's native or Lua modules. Host-owned
+integration tests stay in the consuming project and need their own selection.
+NullRHI automation does not establish rendering, packaging or debugger attachment.
+
+## Generator dependency notice
+
+The bundled `Newtonsoft.Json.dll` is Json.NET 11.0.2. Its
+[MIT notice](Newtonsoft.Json.LICENSE.md) is retained from the
+[upstream 11.0.2 release](https://github.com/JamesNK/Newtonsoft.Json/blob/11.0.2/LICENSE.md).
 
 ## lua-wrapper 是什么？
 

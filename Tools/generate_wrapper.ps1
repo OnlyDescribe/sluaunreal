@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$EngineRoot,
 
-    [string]$ProjectRoot = (Join-Path $PSScriptRoot "..\..\.."),
+    [Parameter(Mandatory = $true)]
+    [string]$ProjectRoot,
 
     [switch]$VerifyDeterministic
 )
@@ -90,11 +91,11 @@ if ($WrapperVersion -notin @("5.7", "5.8"))
 }
 $ProjectRoot = Resolve-ExistingDirectory $ProjectRoot "Project root"
 $SubmoduleRoot = Resolve-ExistingDirectory (Join-Path $PSScriptRoot "..") "slua submodule root"
-$ProjectFile = Join-Path $ProjectRoot "Key.uproject"
+$ProjectFiles = @(Get-ChildItem -LiteralPath $ProjectRoot -Filter "*.uproject" -File)
 $ProjectVcxproj = Join-Path $ProjectRoot "Intermediate\ProjectFiles\UE5.vcxproj"
-if (-not (Test-Path -LiteralPath $ProjectFile -PathType Leaf))
+if ($ProjectFiles.Count -ne 1)
 {
-    throw "Key.uproject was not found under project root: $ProjectRoot"
+    throw "Expected exactly one .uproject under project root: $ProjectRoot"
 }
 if (-not (Test-Path -LiteralPath $ProjectVcxproj -PathType Leaf))
 {

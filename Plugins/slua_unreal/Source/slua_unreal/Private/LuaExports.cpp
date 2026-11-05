@@ -14,7 +14,7 @@
 // slua_unreal.dll links lua.lib privately (through the slua_lua external
 // module) and is itself a UE module DLL. Without dllexport on the archive
 // symbols, MSVC will NOT auto-export Lua's C API from slua_unreal.dll.
-// Downstream modules (e.g. slua_profile, KeyGame Lua glue) and external
+// Downstream modules (e.g. slua_profile and host Lua bindings) and external
 // debuggers that attach to the running process (notably EmmyLua's VS Code
 // "attach to process" flow) need those symbols visible on the DLL's export
 // table.

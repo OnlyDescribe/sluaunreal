@@ -548,7 +548,7 @@ namespace NS_SLUA {
 
 #if WITH_DEV_AUTOMATION_TESTS
     IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSluaProfilerCloseTest,
-        "KeyGame.Lua.Runtime.ProfilerClose",
+        "Slua.Runtime.ProfilerClose",
         EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
     bool FSluaProfilerCloseTest::RunTest(const FString& Parameters)

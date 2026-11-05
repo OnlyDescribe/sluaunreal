@@ -24,11 +24,11 @@ namespace
     }
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSluaConvergenceCallTest,
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSluaReflectedCallTest,
     "Slua.Runtime.ReflectedCalls",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FSluaConvergenceCallTest::RunTest(const FString& Parameters)
+bool FSluaReflectedCallTest::RunTest(const FString& Parameters)
 {
     using namespace NS_SLUA;
     LuaState State("ReflectedCalls", nullptr, false);
@@ -173,7 +173,7 @@ bool FSluaConvergenceCallTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSluaLatentFailureLifetimeTest,
-    "KeyGame.Lua.Runtime.LatentFailureLifetime",
+    "Slua.Runtime.LatentFailureLifetime",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FSluaLatentFailureLifetimeTest::RunTest(const FString& Parameters)

@@ -35,6 +35,11 @@ if ($ActualLibraryHash -ne $LibraryManifest.librarySha256)
 {
     throw "lua.lib hash does not match BUILD-MANIFEST.json. Expected $($LibraryManifest.librarySha256), got $ActualLibraryHash"
 }
+$ActualCliHash = (Get-FileHash -LiteralPath $LuaExe -Algorithm SHA256).Hash
+if ($ActualCliHash -ne $LibraryManifest.cliSha256)
+{
+    throw "lua.exe hash does not match BUILD-MANIFEST.json. Expected $($LibraryManifest.cliSha256), got $ActualCliHash"
+}
 
 $ExpectedExports = @(Get-Content -LiteralPath $ExportManifestPath |
     ForEach-Object { $_.Trim() } |

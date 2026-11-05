@@ -1,4 +1,4 @@
-# Lua 5.3.4 C API exported by slua_unreal.dll for KeyGame modules,
+# Lua 5.3.4 C API exported by slua_unreal.dll for host modules,
 # slua_profile, and EmmyLua native attach. Keep this list in sync with
 # LuaExports.cpp; verify_win64_artifacts.ps1 checks both source and the DLL.
 lua_absindex

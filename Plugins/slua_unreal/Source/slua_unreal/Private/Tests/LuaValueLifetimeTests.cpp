@@ -42,7 +42,7 @@ namespace
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSluaBorrowedContainerDestructionTest,
-    "KeyGame.Lua.Runtime.BorrowedContainerDestruction",
+    "Slua.Runtime.BorrowedContainerDestruction",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FSluaBorrowedContainerDestructionTest::RunTest(const FString& Parameters)
@@ -107,7 +107,7 @@ bool FSluaBorrowedContainerDestructionTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSluaStructReferenceTest,
-    "KeyGame.Lua.Runtime.StructNativeReferences",
+    "Slua.Runtime.StructNativeReferences",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FSluaStructReferenceTest::RunTest(const FString& Parameters)
@@ -149,7 +149,7 @@ bool FSluaStructReferenceTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSluaStructSkippedSerializationReferenceTest,
-    "KeyGame.Lua.Runtime.StructSkippedSerializationReferences",
+    "Slua.Runtime.StructSkippedSerializationReferences",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FSluaStructSkippedSerializationReferenceTest::RunTest(const FString& Parameters)
@@ -194,7 +194,7 @@ bool FSluaStructSkippedSerializationReferenceTest::RunTest(const FString& Parame
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSluaEmptyContainerMetadataTest,
-    "KeyGame.Lua.Runtime.EmptyContainerMetadata",
+    "Slua.Runtime.EmptyContainerMetadata",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FSluaEmptyContainerMetadataTest::RunTest(const FString& Parameters)

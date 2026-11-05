@@ -17,6 +17,12 @@ $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
 if ($Clean -and (Test-Path -LiteralPath $BuildRoot))
 {
+    $BuildDirectory = Get-Item -LiteralPath $BuildRoot
+    if ($BuildDirectory.FullName -ne [System.IO.Path]::GetFullPath((Join-Path $PluginRoot "build_win64")) -or
+        ($BuildDirectory.Attributes -band [System.IO.FileAttributes]::ReparsePoint))
+    {
+        throw "Refusing to clean an unexpected or redirected build directory: $BuildRoot"
+    }
     Remove-Item -LiteralPath $BuildRoot -Recurse -Force
 }
 
