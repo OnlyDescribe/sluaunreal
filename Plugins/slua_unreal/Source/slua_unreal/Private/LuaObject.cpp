@@ -32,14 +32,13 @@
 #include "LuaWrapper.h"
 
 #if (ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4)
-// For PUBG Mobile
 #include "LuaEnums.h"
 #endif
 
 #include "SluaUtil.h"
 #include "LuaReference.h"
 #include "lstate.h"
-#include "LuaBlueprintLibrary.h" // Comment For PUBG Mobile
+#include "LuaBlueprintLibrary.h"
 #include "LuaFunctionAccelerator.h"
 #include "LuaNet.h"
 #include "LuaOverrider.h"
@@ -830,7 +829,11 @@ namespace NS_SLUA {
 
         auto* table = ULuaOverrider::getObjectLuaTable(obj, L);
         if (table && table->getState() == L->l_G->mainthread) {
-            LuaVar luaFunc = ULuaOverrider::getLuaFunction(L, obj, table, func->GetName());
+            LuaVar luaFunc;
+            FString Error;
+            if (ULuaOverrider::getLuaFunction(L, obj, table, func->GetName(), luaFunc, Error) != LUA_OK) {
+                return luaL_error(L, "%s", TCHAR_TO_UTF8(*Error));
+            }
             if (luaFunc.isFunction()) {
                 int resultTop = lua_gettop(L);
                 luaFunc.push(L);
@@ -857,6 +860,8 @@ namespace NS_SLUA {
         if(!ud) luaL_error(L, "Call ufunction error");
 
         auto* funcAcc = reinterpret_cast<LuaFunctionAccelerator*>(ud);
+        if (!LuaFunctionAccelerator::IsValid(funcAcc))
+            return luaL_error(L, "UFunction accelerator is invalid");
         auto func = funcAcc->func;
 #if !UE_BUILD_SHIPPING
         //PROFILER_WATCHER_X(ufuncClosure, TCHAR_TO_UTF8(*FString::Printf(TEXT("%s::%s"), *func->GetOuterUClass()->GetName(), *func->GetName())));
@@ -869,7 +874,13 @@ namespace NS_SLUA {
         UObject* obj;
         int offset=1;
         // use ClassDefaultObject if is static function call 
-        if(cls) obj = cls->ClassDefaultObject;
+        if(cls) {
+#if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
+            obj = cls->GetDefaultObject();
+#else
+            obj = cls->ClassDefaultObject;
+#endif
+        }
         // use obj instance if is member function call
         // and offset set 2 to skip self
         else {
@@ -893,6 +904,11 @@ namespace NS_SLUA {
         {
             NewObjectRecorder objectRecorder(L);
             outParamCount = funcAcc->call(L, offset, obj, isLatentFunction, &objectRecorder);
+        }
+
+        if (outParamCount < 0)
+        {
+            return lua_error(L);
         }
 
         if (isLatentFunction)
@@ -1880,26 +1896,34 @@ namespace NS_SLUA {
         ensure(p);
         int type = lua_type(L, i);
         if (type == LUA_TTABLE) {
+            i = lua_absindex(L, i);
             int arraySize = lua_rawlen(L, i);
             if (arraySize <= 0)
                 return 0;
-            int tableIndex = i;
-            if (i < 0 && i > LUA_REGISTRYINDEX) {
-                tableIndex = i - 1;
-            }
 
             FScriptArrayHelper arrayHelper(p, parms);
             arrayHelper.Resize(arraySize);
 
             auto checker = LuaObject::getChecker(p->Inner);
 
-            int index = 0;
-
-            lua_pushnil(L);
-            while (index < arraySize && lua_next(L, tableIndex) != 0) {
-                checker(L, p->Inner, arrayHelper.GetRawPtr(index++), -1, bForceCopy);
-                lua_pop(L, 1);
-            }
+			// BEGIN MODIFY BY yuyue13@kuaishou.com: LuaTable to TArray, fixed order
+			// 改用 lua_rawgeti 按整数下标顺序读取，避免旧版 lua_next 在 hash 部分的乱序。
+			// 对 nil 元素保留与旧代码一致的"前移压缩"语义（仅推进读取下标，不推进写入下标）。
+			// lua_rawgeti 的索引在压栈前求值，故直接传入 i，无需为旧版 lua_pushnil 做 -1 偏移补偿。
+			int32 writeIndex = 0;
+			for (int32 Index = 1; Index <= arraySize; ++Index)
+			{
+				lua_rawgeti(L, i, Index);
+				if (lua_isnil(L, -1))
+				{
+					lua_pop(L, 1);
+					continue;
+				}
+				checker(L, p->Inner, arrayHelper.GetRawPtr(writeIndex), -1, bForceCopy);
+				++writeIndex;
+				lua_pop(L, 1);
+			}
+			// END MODIFY BY yuyue13@kuaishou.com
             return nullptr;
         }
 
@@ -2240,7 +2264,6 @@ namespace NS_SLUA {
         if (LuaWrapper::pushValue(L, p, uss, parms, i))
             return 1;
 
-        // Comment For PUBG Mobile
         if (uss == FLuaBPVar::StaticStruct()) {
             ((FLuaBPVar*)parms)->value.push(L);
             return 1;
@@ -2433,7 +2456,6 @@ namespace NS_SLUA {
 
         auto uss = p->Struct;
 
-        // Comment For PUBG Mobile
         // if it's LuaBPVar
         if (uss == FLuaBPVar::StaticStruct())
             return FLuaBPVar::checkValue(L, p, parms, i);
@@ -2866,7 +2888,18 @@ namespace NS_SLUA {
         if (DeferGCStruct && !ls->isRef)
         {
             LuaState* luaState = LuaState::get(L);
-            luaState->deferGCStruct.Add(ls);
+            if (luaState && !luaState->isClosingOrClosed())
+            {
+                luaState->deferGCStruct.Add(ls);
+            }
+            else
+            {
+                if (luaState)
+                {
+                    ++luaState->closingDirectStructDeleteCount;
+                }
+                delete ls;
+            }
         }
         else
         {
@@ -3052,7 +3085,6 @@ namespace NS_SLUA {
         regReferencePusher(FMulticastDelegateProperty::StaticClass(), referencePusherUMulticastDelegateProperty);
         
         LuaWrapper::initExt(L);
-        // For PUBG Mobile
 #if (ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4)
         LuaEnums::init(L);
 #endif

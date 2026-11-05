@@ -86,7 +86,6 @@ namespace NS_SLUA {
     }
 
     void* LuaMemoryProfile::alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
-        // LLM_SCOPE(ELLMTag::Lua); // For PUBG Mobile
         LuaState* ls = (LuaState*)ud;
         if (nsize == 0) {
             removeRecord(ls, ptr, osize);

@@ -1,3 +1,55 @@
+# UE 5.8 baseline tools
+
+Run these commands from this repository. Supply the source engine root and a
+UE 5.8 host project containing exactly one `.uproject`. Generate that host's
+Visual Studio project files first so `Intermediate/ProjectFiles/UE5.vcxproj`
+exists. No particular game module, project name or workspace location is required.
+
+```powershell
+$engineRoot = '<UE 5.8 source root>'
+$projectRoot = '<host project directory>'
+./Tools/generate_wrapper.ps1 -EngineRoot $engineRoot -ProjectRoot $projectRoot -VerifyDeterministic
+./Tools/build_win64_lua.ps1
+```
+
+Use `generate_wrapper.ps1` instead of invoking the legacy executable or editing
+generated wrappers. The entry point generates UE 5.8 only and preserves other
+versioned pairs. `WrapperGenerationManifest.json` records input/output hashes;
+two matching generations establish determinism, not runtime correctness.
+
+The Lua build uses `RelWithDebInfo`, checks all outputs and the Lua 5.3 CLI
+before publishing, and records archive/CLI hashes in
+`Plugins/slua_unreal/Library/Win64/BUILD-MANIFEST.json`. CMake selects the
+installed Visual Studio generator or honors `CMAKE_GENERATOR`. Use a CMake
+release supporting that Visual Studio; when changing generators, use `-Clean`
+to remove only this repository's `build_win64` directory. The CLI is generated
+locally and is not tracked. Rebuilding also replaces the archive and manifest;
+review those changes together.
+
+Build a UE 5.8 Editor host with `Plugins/slua_unreal` enabled, then verify its
+DLL and run the isolated native tests:
+
+```powershell
+./Tools/verify_win64_artifacts.ps1 -SluaDll '<host slua DLL path>'
+& "$engineRoot/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" '<host .uproject>' `
+    -unattended -NullRHI -nosound -nosplash -culture=en `
+    '-ExecCmds=Automation RunTests Slua.Baseline' `
+    '-TestExit=Automation Test Queue Empty' '-ReportExportPath=<report directory>'
+```
+
+The suite covers integer-order array conversion, structured inputs and outputs,
+protected method lookup, native local destruction, state isolation and profiler
+shutdown. It depends only on the plugin and UE Engine types. Sparse arrays are
+accepted and record keys ignored; strict dense-array rejection belongs to the
+separate adapt branch. Editor/NullRHI tests do not establish Game/Server linking,
+Cook/Stage, other platforms, rendering, networking or debugger attachment.
+
+## Generator dependency notice
+
+The bundled `Newtonsoft.Json.dll` is Json.NET 11.0.2. Its
+[MIT notice](Newtonsoft.Json.LICENSE.md) is retained from the
+[upstream 11.0.2 release](https://github.com/JamesNK/Newtonsoft.Json/blob/11.0.2/LICENSE.md).
+
 ## lua-wrapper 是什么？
 
 lua-wrapper 是 slua-unreal 的静态代码导出工具，主要功能是将非蓝图类型生成 lua 接口导入 unreal4 中，该工具采用 c# 开发，.Net framework 是 4.6.2，依赖两个库，Newtonsoft.Json 11.0.2 和 libclang 5.0.0（32位），运行前请自行下载。

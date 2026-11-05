@@ -441,7 +441,7 @@ static const luaL_Reg tab_funcs[] = {
 };
 
 
-LUAMOD_API int luaopen_table (lua_State *L) {
+LUAMOD_API int luaopen_table (lua_State *L) LUA_THROWS {
   luaL_newlib(L, tab_funcs);
 #if defined(LUA_COMPAT_UNPACK)
   /* _G.unpack = table.unpack */

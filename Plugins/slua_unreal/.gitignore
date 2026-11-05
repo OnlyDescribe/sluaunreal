@@ -1,2 +1,4 @@
 build_*
 Makefile
+Library/Win64/lua.exe
+Library/Win64/lua_cli.pdb

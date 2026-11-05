@@ -1,3 +1,21 @@
+# slua-unreal UE 5.8 baseline
+
+This branch is based on Tencent/sluaunreal `7970ab7`. It provides UE 5.8
+compatibility, Win64 Lua exports, deterministic wrappers, VM lifecycle
+cleanup and protected Lua method lookup as a standalone plugin.
+
+The table-to-array contract reads integer indices through `lua_rawlen`,
+ignores record fields and accepts sparse tables; sparse lengths are not
+a stable serialization contract. This branch is independent of
+`ue5.8-adapt`, which has stricter array validation and additional runtime fixes.
+
+See [Tools/README.md](Tools/README.md) for generation, Win64 builds and
+the self-contained `Slua.Baseline` automation suite. The original demo
+and upstream usage documentation below are retained as examples.
+Their historical version and performance claims are not this branch's
+validation results. Copyright and third-party notices remain in
+[LICENSE.TXT](LICENSE.TXT).
+
 ## What's slua-unreal?
 
 Slua-unreal is an unreal4 plugin, which allows you to use Lua language to develop game logic and hot fix your code. It gives you 3 ways to wrap your C++ interface to Lua, including reflection by blueprint, C++ template and static code generation. It also enables a two-way communication between blueprint and Lua.  The advantage of Lua over C++ is that it requires no compilation for logic change, which significantly speeds up game development process.
@@ -6,16 +24,8 @@ Slua-unreal is an unreal4 plugin, which allows you to use Lua language to develo
 
 slua-unreal作为unreal引擎的插件，通过unreal自带蓝图接口的反射能力，结合libclang静态c++代码分析，自动化导出蓝图接口和静态c++接口，提供给lua语言，使得可以通过lua语言开发unreal游戏业务逻辑，方便游戏高效迭代开发，上线热更新，同时支持lua到c++双向，lua到蓝图双向调用，使用lua语言完美替代unreal的c++开发方式，修改业务逻辑不需要等待c++编译，大大提升开发速度。
 
-目前该项目作为腾讯PUBG手游和潘多拉系统，该系统用于腾讯UE4游戏业务，帮助游戏业务构建周边系统、运营系统，上线质量稳定。
-
 欢迎issue，pr，star，fork。
 
-
-## Showcases
-
-![icon_logo](https://user-images.githubusercontent.com/6227270/59747641-db6e1b80-92ab-11e9-81b6-7ca7ebfd6c0e.png)![logo](https://user-images.githubusercontent.com/6227270/59747461-80d4bf80-92ab-11e9-989b-44809d5b780c.png)
-
-Slua-unreal is currently adopted in PUBG mobile game, one of Tencent’s most-played and highest-grossing mobile games, and Pandora system. This system is widely used in Tencent’s UE4 gaming business, helping the business build and maintain its commercial operation system.
 
 ## What's new?
 
@@ -342,9 +352,6 @@ Actor.Position.X = 1
 ### Slua交互性能优化
 - 函数索引相比 1.x 版本有10倍速度提升
 - 属性访问、函数调用等，普遍有20%~800%的提升（大部分API速度是原来的1.5\~3倍）。
-
-### 稳定性更加强大
-支撑PUBG Mobile 线上业务开发，稳定性得到充分验证。
 
 ### 版本支持
 - UE4.18、UE4.26完整支持，支持UE5.1，其他版本因为时间精力问题暂时无法支持到位

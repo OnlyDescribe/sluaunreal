@@ -998,7 +998,7 @@ namespace NS_SLUA {
 #else
         // for TDelegate
         template<class R, class ...ARGS>
-        static int push(lua_State* L, TDelegate<R, ARGS...>& delegate);
+        static int push(lua_State* L, TDelegate<R(ARGS...)>& delegate);
 #endif
         
 

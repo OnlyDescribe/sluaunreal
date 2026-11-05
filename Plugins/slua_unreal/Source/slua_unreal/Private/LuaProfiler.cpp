@@ -37,7 +37,15 @@
 
 #include "LuaProfiler.inl"
 #include "SluaUtil.h"
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Misc/AutomationTest.h"
+#endif
+#include "Runtime/Launch/Resources/Version.h"
+#if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
+#include "Stats/Stats.h"
+#else
 #include "Stats/Stats2.h"
+#endif
 
 #if (ENGINE_MINOR_VERSION>=3) && (ENGINE_MAJOR_VERSION==5)
 #ifdef max
@@ -67,6 +75,7 @@ namespace NS_SLUA {
         HookState currentHookState = HookState::UNHOOK;
         int64 profileTotalCost = 0;
         p_tcp tcpSocket = nullptr;
+        LuaState* tcpSocketOwner = nullptr;
         
         // copy code from buffer.cpp in luasocket
         int buffer_get(p_buffer buf, size_t *count, FArrayReader& messageReader) {
@@ -139,6 +148,7 @@ namespace NS_SLUA {
         }
     
         bool checkSocketRead() {
+            if (!tcpSocket) return false;
             int result;
             u_long nread = 0;
             t_socket fd = tcpSocket->sock;
@@ -255,7 +265,7 @@ namespace NS_SLUA {
 
         void debug_hook(lua_State* L, lua_Debug* ar) {
             int64 start = getTime();
-            if (ignoreHook) return;
+            if (ignoreHook || LuaState::get(L)->isClosingOrClosed()) return;
 
             lua_getinfo(L, "nSl", ar);
 
@@ -377,10 +387,12 @@ namespace NS_SLUA {
         int setSocket(lua_State* L) {
             if (lua_isnil(L, 1)) {
                 tcpSocket = nullptr;
+                tcpSocketOwner = nullptr;
                 return 0;
             }
             tcpSocket = (p_tcp)luaL_checkudata(L, 1, "tcp{client}");
             if (!tcpSocket) luaL_error(L, "Set invalid socket");
+            tcpSocketOwner = LuaState::get(L);
             return 0;
         }
 
@@ -507,16 +519,26 @@ namespace NS_SLUA {
     {
         lua_State* L = LS->getLuaState();
         ensure(L);
-        auto& profiler = selfProfiler.FindChecked(LS);
-        if (profiler.isValid())
+
+        // LuaState is already unregistered, so registry-backed LuaVar calls cannot
+        // run here. Detach native borrowers before lua_close finalizes the socket.
+        lua_sethook(L, nullptr, 0, 0);
+        if (tcpSocketOwner == LS)
         {
-            profiler.callField("stop", profiler);
-            selfProfiler.Remove(LS);
+            tcpSocket = nullptr;
+            tcpSocketOwner = nullptr;
+        }
+        selfProfiler.Remove(LS);
+
+        if (selfProfiler.Num() > 0)
+        {
+            return;
         }
 
         SluaProfilerDataManager::EndRecord();
 
         tcpSocket = nullptr;
+        tcpSocketOwner = nullptr;
         ignoreHook = false;
         currentHookState = HookState::UNHOOK;
         profileTotalCost = 0;
@@ -524,14 +546,92 @@ namespace NS_SLUA {
     }
     
 
-    LuaProfiler::LuaProfiler(const char* funcName)
+#if WITH_DEV_AUTOMATION_TESTS
+    IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSluaProfilerCloseTest,
+        "Slua.Baseline.ProfilerClose",
+        EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+    bool FSluaProfilerCloseTest::RunTest(const FString& Parameters)
     {
-        takeSample(PHE_CALL, 0, funcName, "", getTime(), *LuaState::get());
+        if (!TestTrue(TEXT("profiler close test requires an isolated process"), selfProfiler.IsEmpty()))
+            return false;
+
+        LuaState First("ProfilerCloseFirst", nullptr, false);
+        LuaState Second("ProfilerCloseSecond", nullptr, false);
+        LuaState Survivor("ProfilerCloseSurvivor", nullptr, false);
+        if (!TestTrue(TEXT("states initialize"), First.init() && Second.init() && Survivor.init()))
+            return false;
+
+        auto InstallSocket = [](LuaState& State)
+        {
+            // Exercise real LuaSocket userdata ownership without opening a connection.
+            // Master and client sockets share the same native layout and finalizer.
+            LuaVar Result = State.doString(R"lua(
+                fixtureSocket = require('socket.core').tcp()
+                debug.setmetatable(fixtureSocket, debug.getregistry()['tcp{client}'])
+                slua_profile.setSocket(fixtureSocket)
+                return true
+            )lua");
+            return Result.isBool() && Result.castTo<bool>();
+        };
+        if (!TestTrue(TEXT("first socket is installed"), InstallSocket(First)) ||
+            !TestTrue(TEXT("second socket is installed"), InstallSocket(Second)))
+            return false;
+        p_tcp SurvivingSocket = tcpSocket;
+
+        bool bFinalizedWithoutHook = false;
+        lua_State* L = First.getLuaState();
+        lua_pushlightuserdata(L, &bFinalizedWithoutHook);
+        lua_pushcclosure(L, [](lua_State* ClosingState) -> int
+        {
+            *static_cast<bool*>(lua_touserdata(ClosingState, lua_upvalueindex(1))) =
+                lua_gethook(ClosingState) == nullptr;
+            return 0;
+        }, 1);
+        lua_setglobal(L, "checkClosingHook");
+        TestTrue(TEXT("close finalizer is installed"), First.doString(R"lua(
+            closeSentinel = setmetatable({}, { __gc = checkClosingHook })
+            return true
+        )lua").isValid());
+        lua_sethook(L, [](lua_State*, lua_Debug*) {}, LUA_MASKCALL | LUA_MASKRET, 0);
+
+        First.close();
+        TestTrue(TEXT("closing a non-owner preserves the active socket"), tcpSocket == SurvivingSocket);
+        TestTrue(TEXT("hooks are disabled before Lua finalizers run"), bFinalizedWithoutHook);
+        Second.close();
+        TestNull(TEXT("closing the socket owner clears the native borrower with another VM alive"), tcpSocket);
+
+        // Do not dereference the stale pointer if this regression is run before the fix.
+        if (tcpSocket == nullptr)
+        {
+            TestTrue(TEXT("survivor enables its profiler hook"), Survivor.doString(R"lua(
+                slua_profile.changeHookState(1)
+                slua_profile.currentRunState = 1
+                return true
+            )lua").isValid());
+            LuaProfiler::tick(&Survivor);
+            TestTrue(TEXT("survivor remains usable without a socket"), Survivor.doString("return true").isValid());
+        }
+        Survivor.close();
+        return true;
+    }
+#endif
+
+    LuaProfiler::LuaProfiler(const char* funcName)
+        : state(LuaState::get())
+    {
+        if (state)
+        {
+            takeSample(PHE_CALL, 0, funcName, "", getTime(), *state);
+        }
     }
 
     LuaProfiler::~LuaProfiler()
     {
-        takeSample(PHE_RETURN, 0, "", "", getTime(), *LuaState::get());
+        if (state && !state->isClosingOrClosed())
+        {
+            takeSample(PHE_RETURN, 0, "", "", getTime(), *state);
+        }
     }
 
 }

@@ -22,7 +22,6 @@
 #include "UObject/Stack.h"
 #include "LuaState.h"
 #include "lstate.h"
-// #include "CrashContextCollector.h" // For PUBG Mobile
 
 namespace NS_SLUA {
 
@@ -171,6 +170,9 @@ namespace NS_SLUA {
             lua_pushvalue(l,p);
             vars[0].ref = new RefRef(l);
             vars[0].luatype=type;
+#if UE_BUILD_DEVELOPMENT
+            state->addRefTraceback(vars[0].ref->ref);
+#endif
             break;
         case LV_TUPLE:
             ensure(p>0 && lua_gettop(l)>=p);
@@ -294,19 +296,14 @@ namespace NS_SLUA {
                 break;
             }
             case LUA_TFUNCTION:
-                vars[i].luatype = LV_FUNCTION;
-                lua_pushvalue(l,p);
-                vars[i].ref = new RefRef(l);
-                break;
             case LUA_TTABLE:
-                vars[i].luatype = LV_TABLE;
-                lua_pushvalue(l,p);
-                vars[i].ref = new RefRef(l);
-                break;
             case LUA_TUSERDATA:
-                vars[i].luatype = LV_USERDATA;
                 lua_pushvalue(l, p);
                 vars[i].ref = new RefRef(l);
+                vars[i].luatype = t == LUA_TFUNCTION ? LV_FUNCTION : t == LUA_TTABLE ? LV_TABLE : LV_USERDATA;
+#if UE_BUILD_DEVELOPMENT
+                LuaState::get(l)->addRefTraceback(vars[i].ref->ref);
+#endif
                 break;
             case LUA_TLIGHTUSERDATA:
                 vars[i].luatype = LV_LIGHTUD;
@@ -329,9 +326,6 @@ namespace NS_SLUA {
     {
         ref=luaL_ref(l,LUA_REGISTRYINDEX);
         stateIndex = LuaState::get(l)->stateIndex();
-#if UE_BUILD_DEVELOPMENT
-        LuaState::get(l)->addRefTraceback(ref);
-#endif
     }
 
     LuaVar::RefRef::~RefRef() {
@@ -680,7 +674,7 @@ namespace NS_SLUA {
     int LuaVar::pushArgByParms(FProperty* prop,uint8* parms) {
         auto L = getState();
         if (LuaObject::push(L,prop,parms,nullptr))
-            return prop->ElementSize;
+            return GetPropertyElementSize(prop);
         return 0;
     }
 
@@ -693,8 +687,6 @@ namespace NS_SLUA {
             return false;
         }
 
-        // For PUBG Mobile
-        // GCrashContextCollector->AddCrashContextData(ECrashContextDataType::CVT_SEQ_CALL_FUNCTIONS, func->GetName(), false, ECrashContextDataLogLevel::CVLL_700);
 
         auto L = getState();
 

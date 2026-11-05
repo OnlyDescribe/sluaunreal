@@ -120,7 +120,7 @@ namespace NS_SLUA {
     void LuaState::decreaseCallStack()
     {
         currentCallStack--;
-        newObjectsInCallStack.Pop(false);
+        newObjectsInCallStack.Pop(SLUA_ALLOW_SHRINKING_NO);
     }
 
     bool LuaState::hasObjectInStack(const UObject* obj, int stackLayer)
@@ -199,12 +199,42 @@ namespace NS_SLUA {
                 }
             }
 
+            FString path = UTF8_TO_TCHAR(name);
+
+#if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
+            // UE 5.7 removed ANY_PACKAGE-compatible search paths. FindFirstObject
+            // searches across loaded packages and preserves the old import semantics.
+            UClass* uclass = FindFirstObject<UClass>(*path, EFindFirstObjectOptions::NativeFirst);
+            if (!uclass) {
+                // Try to load then retry (handles asset-based classes not yet in memory)
+                LoadObject<UObject>(NULL, *path);
+                uclass = FindFirstObject<UClass>(*path, EFindFirstObjectOptions::NativeFirst);
+            }
+            if (uclass) {
+                LuaObject::pushClass(L, uclass);
+                state->cacheImportedMap.Add(name, ImportedObjectCache {uclass, ImportedClass});
+                return 1;
+            }
+
+            UScriptStruct* ustruct = FindFirstObject<UScriptStruct>(*path, EFindFirstObjectOptions::NativeFirst);
+            if (ustruct) {
+                LuaObject::pushStruct(L, ustruct);
+                state->cacheImportedMap.Add(name, ImportedObjectCache {ustruct, ImportedStruct});
+                return 1;
+            }
+
+            UEnum* uenum = FindFirstObject<UEnum>(*path, EFindFirstObjectOptions::NativeFirst);
+            if (uenum) {
+                LuaObject::pushEnum(L, uenum);
+                state->cacheImportedMap.Add(name, ImportedObjectCache{ uenum, ImportedEnum });
+                return 1;
+            }
+#else
 #if ENGINE_MAJOR_VERSION==5 && ENGINE_MINOR_VERSION>0
             static UPackage* AnyPackage = (UPackage*)-1;
 #else
             static UPackage* AnyPackage = ANY_PACKAGE;
 #endif
-            FString path = UTF8_TO_TCHAR(name);
             if (!FindObject<UObject>(AnyPackage, *path)) {
                 // Try to load object if not found!
                 LoadObject<UObject>(NULL, *path);
@@ -229,6 +259,7 @@ namespace NS_SLUA {
                 state->cacheImportedMap.Add(name, ImportedObjectCache{ uenum, ImportedEnum });
                 return 1;
             }
+#endif
 
             luaL_error(L, "Can't find class named %s", name);
         }
@@ -239,7 +270,7 @@ namespace NS_SLUA {
     TMap<int,LuaState*> stateMapFromIndex;
     static int StateIndex = 0;
 
-    LuaState::LuaState(const char* name, UGameInstance* gameInstance)
+    LuaState::LuaState(const char* name, UGameInstance* gameInstance, bool bInPrimaryEligible)
         : loadFileDelegate(nullptr)
         , L(nullptr)
         , cacheObjRef(LUA_NOREF)
@@ -255,6 +286,13 @@ namespace NS_SLUA {
         , lastFullGCSeconds(0.0)
         , latentDelegate(nullptr)
         , currentCallStack(0)
+        , bPrimaryEligible(bInPrimaryEligible)
+        , bRegistered(false)
+        , bClosing(false)
+        , bClosed(false)
+        , bUObjectListenersRegistered(false)
+        , bLifecycleDelegatesRegistered(false)
+        , closingDirectStructDeleteCount(0)
     {
         if(name) stateName=UTF8_TO_TCHAR(name);
         this->gameInstance = gameInstance;
@@ -284,6 +322,8 @@ namespace NS_SLUA {
     }
 
     LuaState* LuaState::get(UGameInstance* pGI) {
+        if (!pGI)
+            return nullptr;
         for (auto& pair : stateMapFromIndex) {
             auto state = pair.Value;
             if (state->gameInstance.Get() == pGI)
@@ -294,13 +334,55 @@ namespace NS_SLUA {
 
     UGameInstance* LuaState::getObjectGameInstance(const UObject* obj)
     {
-        auto* outer = obj->GetOuter();
-        auto* world = outer ? outer->GetWorld() : nullptr;
-        if (!world)
+        if (!obj)
         {
-            world = GWorld;
+            return nullptr;
         }
-        return world ? world->GetGameInstance() : nullptr;
+
+        if (const UGameInstance* gameInstanceObject = Cast<UGameInstance>(obj))
+        {
+            return const_cast<UGameInstance*>(gameInstanceObject);
+        }
+
+        // NotifyUObjectCreated can run before the UObject constructor has installed
+        // the final vtable. Never call obj->GetWorld() from that path; walk the
+        // already-established Outer chain using non-virtual type checks instead.
+        for (const UObject* outer = obj->GetOuter(); outer; outer = outer->GetOuter())
+        {
+            if (const UGameInstance* gameInstance = Cast<UGameInstance>(outer))
+            {
+                return const_cast<UGameInstance*>(gameInstance);
+            }
+            if (const UWorld* world = Cast<UWorld>(outer))
+            {
+                return world->GetGameInstance();
+            }
+        }
+
+        return nullptr;
+    }
+
+    void LuaState::refreshPrimaryState()
+    {
+        LuaState* soleEligibleState = nullptr;
+        for (const TPair<int, LuaState*>& pair : stateMapFromIndex)
+        {
+            LuaState* candidate = pair.Value;
+            if (!candidate || !candidate->bPrimaryEligible || candidate->bClosing || candidate->bClosed)
+            {
+                continue;
+            }
+
+            if (soleEligibleState)
+            {
+                // Context-free lookup is unsafe while more than one runtime is eligible.
+                mainState = nullptr;
+                return;
+            }
+            soleEligibleState = candidate;
+        }
+
+        mainState = soleEligibleState;
     }
 
     // check lua top , this function can omit
@@ -465,7 +547,7 @@ namespace NS_SLUA {
             Log::Error("callLuaTick cast fail: %s. if obj implement ILuaOverriderInterface in BP, change to c++ instead.", TCHAR_TO_UTF8(*obj->GetName()));
             return;
         }
-        LuaVar self = overrideInterface->GetSelfTable();
+        LuaVar self = overrideInterface->GetSelfTable(this);
         if (!tickFunc.isFunction()) {
             LuaVar tick = self.getFromTable<LuaVar>("LuaTick");
             if (tick.isFunction()) {
@@ -477,24 +559,64 @@ namespace NS_SLUA {
         }
     }
 
-    void LuaState::close() {
-        if(mainState==this) mainState = nullptr;
+    void LuaState::drainDeferredStructs()
+    {
+        while (deferGCStruct.Num() > 0)
+        {
+            LuaStruct* luaStruct = deferGCStruct.Pop(EAllowShrinking::No);
+            delete luaStruct;
+        }
+    }
 
-        latentDelegate = nullptr;
+    void LuaState::close() {
+        if (!ensureMsgf(IsInGameThread(), TEXT("LuaState::close must run on the Game Thread")))
+        {
+            return;
+        }
+        if (bClosed || bClosing)
+        {
+            return;
+        }
+
+        bClosing = true;
+        closingDirectStructDeleteCount = 0;
+        const int32 deferredCountBeforeClose = deferGCStruct.Num();
+        const bool bWasRegistered = bRegistered;
+        if (bRegistered)
+        {
+            stateMapFromIndex.Remove(si);
+            bRegistered = false;
+        }
+
+        refreshPrimaryState();
+
+        const bool bLastRegisteredState = bWasRegistered && stateMapFromIndex.Num() == 0;
+
+        if (latentDelegate)
+        {
+            latentDelegate->bindLuaState(nullptr);
+        }
+
+        drainDeferredStructs();
 
 #if WITH_EDITOR
-        if (!mainState && overrider)
+        if (bLastRegisteredState && overrider)
+        {
             overrider->removeOverrides();
+        }
 #endif
+        if (bLastRegisteredState && overrider)
+        {
+            overrider->releaseGlobalHooks();
+        }
         if (overrider) {
             delete overrider;
             overrider = nullptr;
         }
 
         releaseAllLink();
-
         cleanupThreads();
-        
+
         if(L) {
 #ifdef ENABLE_PROFILER
 #if !UE_BUILD_SHIPPING
@@ -503,41 +625,59 @@ namespace NS_SLUA {
 #endif
 #endif
             lua_close(L);
-            GUObjectArray.RemoveUObjectCreateListener(this);
-            GUObjectArray.RemoveUObjectDeleteListener(this);
-            FCoreUObjectDelegates::GetPostGarbageCollect().Remove(pgcHandler);
-            FWorldDelegates::OnWorldCleanup.Remove(wcHandler);
-            stateMapFromIndex.Remove(si);
             L=nullptr;
         }
+
+        drainDeferredStructs();
+
+        if (bUObjectListenersRegistered)
+        {
+            GUObjectArray.RemoveUObjectCreateListener(this);
+            GUObjectArray.RemoveUObjectDeleteListener(this);
+            bUObjectListenersRegistered = false;
+        }
+        if (bLifecycleDelegatesRegistered)
+        {
+            FCoreUObjectDelegates::GetPostGarbageCollect().Remove(pgcHandler);
+            FWorldDelegates::OnWorldCleanup.Remove(wcHandler);
+            pgcHandler.Reset();
+            wcHandler.Reset();
+            bLifecycleDelegatesRegistered = false;
+        }
+
+        latentDelegate = nullptr;
         objRefs.Empty();
         if (deadLoopCheck) {
             delete deadLoopCheck;
             deadLoopCheck = nullptr;
         }
 
-        if (!mainState)
+        if (bLastRegisteredState)
         {
             LuaFunctionAccelerator::clear();
         }
+
+        ensureMsgf(deferGCStruct.Num() == 0,
+            TEXT("LuaState %d retained deferred structs after close"), si);
+        UE_LOG(Slua, Verbose,
+            TEXT("LuaState %d close: deferred_before=%d closing_direct=%d deferred_after=%d remaining_states=%d"),
+            si, deferredCountBeforeClose, closingDirectStructDeleteCount, deferGCStruct.Num(), stateMapFromIndex.Num());
+
+        bClosed = true;
+        bClosing = false;
     }
 
 
     bool LuaState::init() {
-
-        if(deadLoopCheck)
+        if (!ensureMsgf(IsInGameThread(), TEXT("LuaState::init must run on the Game Thread")))
+        {
             return false;
-
-        if(!mainState) 
-            mainState = this;
-
-        pgcHandler = FCoreUObjectDelegates::GetPostGarbageCollect().AddRaw(this, &LuaState::onEngineGC);
-        wcHandler = FWorldDelegates::OnWorldCleanup.AddRaw(this, &LuaState::onWorldCleanup);
-        GUObjectArray.AddUObjectDeleteListener(this);
-        GUObjectArray.AddUObjectCreateListener(this);
-
-        latentDelegate = NewObject<ULatentDelegate>((UObject*)GetTransientPackage(), ULatentDelegate::StaticClass());
-        latentDelegate->bindLuaState(this);
+        }
+        if (L || bRegistered || bClosing || bClosed || deadLoopCheck)
+        {
+            UE_LOG(Slua, Error, TEXT("LuaState '%s' cannot initialize from its current lifecycle state"), *stateName);
+            return false;
+        }
 
         si = ++StateIndex;
 
@@ -561,11 +701,30 @@ namespace NS_SLUA {
 #else
         L = luaL_newstate();
 #endif
-        
+
+        if (!L)
+        {
+            UE_LOG(Slua, Error, TEXT("LuaState '%s' failed to allocate Lua VM"), *stateName);
+            close();
+            return false;
+        }
+
         lua_atpanic(L,_atPanic);
         // bind this to L
         *((void**)lua_getextraspace(L)) = this;
         stateMapFromIndex.Add(si,this);
+        bRegistered = true;
+        refreshPrimaryState();
+
+        pgcHandler = FCoreUObjectDelegates::GetPostGarbageCollect().AddRaw(this, &LuaState::onEngineGC);
+        wcHandler = FWorldDelegates::OnWorldCleanup.AddRaw(this, &LuaState::onWorldCleanup);
+        bLifecycleDelegatesRegistered = true;
+        GUObjectArray.AddUObjectDeleteListener(this);
+        GUObjectArray.AddUObjectCreateListener(this);
+        bUObjectListenersRegistered = true;
+
+        latentDelegate = NewObject<ULatentDelegate>((UObject*)GetTransientPackage(), ULatentDelegate::StaticClass());
+        latentDelegate->bindLuaState(this);
 
         // init obj cache table
         cacheObjRef = newCacheTable(L);
@@ -705,7 +864,7 @@ namespace NS_SLUA {
 #if (ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4)
         propList.RemoveSwap(propud);
 #else
-        propList.RemoveSwap(propud, false);
+        propList.RemoveSwap(propud, SLUA_ALLOW_SHRINKING_NO);
 #endif
     }
 
@@ -787,9 +946,13 @@ namespace NS_SLUA {
 #if !((ENGINE_MINOR_VERSION<23) && (ENGINE_MAJOR_VERSION==4))
     void LuaState::OnUObjectArrayShutdown()
     {
-        // remove listeners to avoid crash on pc when app exit
-        GUObjectArray.RemoveUObjectCreateListener(this);
-        GUObjectArray.RemoveUObjectDeleteListener(this);
+        if (bUObjectListenersRegistered)
+        {
+            // Remove listeners before the global UObject array becomes unavailable.
+            GUObjectArray.RemoveUObjectCreateListener(this);
+            GUObjectArray.RemoveUObjectDeleteListener(this);
+            bUObjectListenersRegistered = false;
+        }
     }
 #endif
 
@@ -887,23 +1050,34 @@ namespace NS_SLUA {
 
     int LuaState::addThread(lua_State *thread)
     {
+        if (!L || bClosing || bClosed || !thread || thread == L || thread->l_G->mainthread != L->l_G->mainthread)
+        {
+            return LUA_REFNIL;
+        }
+
+        if (const int32* existingRef = threadToRef.Find(thread))
+        {
+            return *existingRef;
+        }
+
+        const int ownerTop = lua_gettop(L);
+        const int threadTop = lua_gettop(thread);
         int isMainThread = lua_pushthread(thread);
         if (isMainThread == 1)
         {
             lua_pop(thread, 1);
-
-            luaL_error(thread, "Can't call latent action in main lua thread!");
             return LUA_REFNIL;
         }
 
         lua_xmove(thread, L, 1);
-        lua_pop(thread, 1);
-
         ensure(lua_isthread(L, -1));
 
         int threadRef = luaL_ref(L, LUA_REGISTRYINDEX);
         threadToRef.Add(thread, threadRef);
         refToThread.Add(threadRef, thread);
+
+        ensure(lua_gettop(L) == ownerTop);
+        ensure(lua_gettop(thread) == threadTop);
 
         return threadRef;
     }
@@ -912,62 +1086,107 @@ namespace NS_SLUA {
     {
         QUICK_SCOPE_CYCLE_COUNTER(Lua_LatentCallback);
 
-        lua_State **threadPtr = refToThread.Find(threadRef);
-        if (threadPtr)
+        if (!L || bClosing || bClosed)
         {
-            lua_State *thread = *threadPtr;
-            bool threadIsDead = false;
-
-            if (lua_status(thread) == LUA_OK && lua_gettop(thread) == 0)
-            {
-                Log::Error("cannot resume dead coroutine");
-                threadIsDead = true;
-            }
-            else
-            {
-#if LUA_VERSION_NUM > 503
-                int nres = 0;
-                int status = lua_resume(thread, L, 0, &nres);
-#else
-                int status = lua_resume(thread, L, 0);
-#endif
-                if (status == LUA_OK || status == LUA_YIELD)
-                {
-                    if (status == LUA_OK)
-                    {
-                        threadIsDead = true;
-                    }
-                }
-            }
-
-            if (threadIsDead)
-            {
-                threadToRef.Remove(thread);
-                refToThread.Remove(threadRef);
-                luaL_unref(L, LUA_REGISTRYINDEX, threadRef);
-            }
+            return;
         }
+
+        lua_State **threadPtr = refToThread.Find(threadRef);
+        if (!threadPtr)
+        {
+            return;
+        }
+
+        lua_State *thread = *threadPtr;
+        const int32* reverseRef = threadToRef.Find(thread);
+        if (!reverseRef || *reverseRef != threadRef)
+        {
+            UE_LOG(Slua, Error, TEXT("LuaState %d coroutine registry invariant failed for ref %d"), si, threadRef);
+            return;
+        }
+
+        const int ownerTop = lua_gettop(L);
+        int status = LUA_OK;
+        if (lua_status(thread) == LUA_OK && lua_gettop(thread) == 0)
+        {
+            Log::Error("cannot resume dead coroutine");
+        }
+        else
+        {
+#if LUA_VERSION_NUM > 503
+            int nres = 0;
+            status = lua_resume(thread, L, 0, &nres);
+#else
+            status = lua_resume(thread, L, 0);
+#endif
+        }
+
+        if (status == LUA_YIELD)
+        {
+            lua_settop(L, ownerTop);
+            return;
+        }
+
+        if (status != LUA_OK)
+        {
+            const char* errorMessage = lua_tostring(thread, -1);
+            luaL_traceback(L, thread, errorMessage ? errorMessage : "coroutine resume failed", 1);
+            const char* traceback = lua_tostring(L, -1);
+            onError(traceback ? traceback : "coroutine resume failed");
+        }
+
+        lua_settop(thread, 0);
+        lua_settop(L, ownerTop);
+        refToThread.Remove(threadRef);
+        threadToRef.Remove(thread);
+        luaL_unref(L, LUA_REGISTRYINDEX, threadRef);
     }
 
     int LuaState::findThread(lua_State *thread)
     {
+        if (!L || bClosing || bClosed || !thread)
+        {
+            return LUA_REFNIL;
+        }
         int32 *threadRefPtr = threadToRef.Find(thread);
         return threadRefPtr ? *threadRefPtr : LUA_REFNIL;
     }
 
     void LuaState::cleanupThreads()
     {
-        for (TMap<lua_State*, int32>::TIterator It(threadToRef); It; ++It)
+        if (L)
         {
-            int32 threadRef = It.Value();
-            if (threadRef != LUA_REFNIL)
+            for (const TPair<int, lua_State*>& pair : refToThread)
             {
-                luaL_unref(L, LUA_REGISTRYINDEX, threadRef);
+                if (pair.Key != LUA_REFNIL && pair.Key != LUA_NOREF)
+                {
+                    luaL_unref(L, LUA_REGISTRYINDEX, pair.Key);
+                }
             }
         }
         threadToRef.Empty();
         refToThread.Empty();
     }
+
+#if WITH_DEV_AUTOMATION_TESTS
+    int32 LuaState::getRegisteredStateCountForTests()
+    {
+        return stateMapFromIndex.Num();
+    }
+
+    LuaState* LuaState::getPrimaryStateForTests()
+    {
+        return mainState;
+    }
+
+    void LuaState::invokeLatentCallbackForTests(ULatentDelegate* Delegate, int32 ThreadRef)
+    {
+        if (Delegate)
+        {
+            Delegate->OnLatentCallback(ThreadRef);
+        }
+    }
+#endif
 
     ULatentDelegate* LuaState::getLatentDelegate() const
     {

@@ -18,23 +18,30 @@
 
 namespace NS_SLUA {
 
-#if ((ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4))
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 3
+    using FVector2 = UE::Math::TVector2<FVector::FReal>;
+#endif
+
+#if ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION < 25
     #include "LuaWrapper4.18Head.inc"
-#elif ((ENGINE_MINOR_VERSION>=25) && (ENGINE_MAJOR_VERSION==4))
+#elif ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 25
     #include "LuaWrapper4.25Head.inc"
-#elif ((ENGINE_MINOR_VERSION==1) && (ENGINE_MAJOR_VERSION==5))
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 1
     #include "LuaWrapper5.1Head.inc"
     DefTypeName(VectorRegister4d);
-#elif ((ENGINE_MINOR_VERSION==2) && (ENGINE_MAJOR_VERSION==5))
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 2
     #include "LuaWrapper5.2Head.inc"
     DefTypeName(VectorRegister4d);
-#elif ((ENGINE_MINOR_VERSION>=3) && (ENGINE_MAJOR_VERSION==5))
-    using FVector2 = UE::Math::TVector2<FVector::FReal>;
-#if (ENGINE_MINOR_VERSION==3)
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 3
     #include "LuaWrapper5.3Head.inc"
-#elif (ENGINE_MINOR_VERSION==4)
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 4
     #include "LuaWrapper5.4Head.inc"
-#endif
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 7
+    #include "LuaWrapper5.7Head.inc"
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 8
+    #include "LuaWrapper5.8Head.inc"
+#else
+    #error "No generated slua wrapper pair for this Unreal Engine version. Generate and validate a matching pair."
 #endif
     DefTypeName(FSoftObjectPtr);
 

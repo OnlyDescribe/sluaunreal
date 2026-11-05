@@ -1,0 +1,5 @@
+# Preserve the exact generator input bytes recorded by WrapperGenerationManifest.json.
+Tools/config.json -text whitespace=cr-at-eol
+# Generated wrapper hashes use LF on every checkout.
+Plugins/slua_unreal/Source/slua_unreal/Private/LuaWrapper5.8.inc text eol=lf
+Plugins/slua_unreal/Source/slua_unreal/Public/LuaWrapper5.8Head.inc text eol=lf

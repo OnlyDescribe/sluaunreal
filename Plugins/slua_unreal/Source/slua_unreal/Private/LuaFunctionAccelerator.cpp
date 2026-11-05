@@ -15,10 +15,32 @@
 
 #include "LatentDelegate.h"
 #include "LuaOverrider.h"
+#include "UObject/SoftObjectPath.h"
+
+#if WITH_DEV_AUTOMATION_TESTS
+namespace
+{
+    NS_SLUA::lua_State* GFunctionLocalLifetimeProbeState = nullptr;
+
+    void FunctionLocalLifetimeProbe(UObject* Context, FFrame& Stack, RESULT_DECL)
+    {
+        if (GFunctionLocalLifetimeProbeState)
+        {
+            luaL_error(GFunctionLocalLifetimeProbeState, "forced local lifetime probe failure");
+        }
+    }
+}
+#endif
 
 namespace NS_SLUA
 {
     TMap<UFunction*, LuaFunctionAccelerator*> LuaFunctionAccelerator::cache;
+    TSet<LuaFunctionAccelerator*> LuaFunctionAccelerator::ValidAccels;
+
+    bool LuaFunctionAccelerator::IsValid(LuaFunctionAccelerator* Accel)
+    {
+        return ValidAccels.Contains(Accel);
+    }
 
     inline bool isLatentProperty(FProperty* prop)
     {
@@ -152,6 +174,7 @@ namespace NS_SLUA
         
         auto value = new LuaFunctionAccelerator(inFunc);
         cache.Emplace(inFunc, value);
+        ValidAccels.Add(value);
         return value;
     }
 
@@ -160,6 +183,7 @@ namespace NS_SLUA
         auto funcPtr = cache.Find(inFunc);
         if (funcPtr)
         {
+            ValidAccels.Remove(*funcPtr);
             delete *funcPtr;
             cache.Remove(inFunc);
             return true;
@@ -176,6 +200,124 @@ namespace NS_SLUA
         }
 
         cache.Empty();
+        ValidAccels.Empty();
+    }
+
+    struct LuaFunctionAccelerator::FProtectedCallContext
+    {
+        LuaFunctionAccelerator* accelerator;
+        UObject* object;
+        uint8* params;
+        FProperty** nextParamProperty;
+        PTRINT* outParams;
+        FFrame* stack;
+        bool* isLatentFunction;
+        int nextArgumentIndex;
+    };
+
+    int LuaFunctionAccelerator::protectedFillParams(lua_State* L)
+    {
+        FProtectedCallContext* context = static_cast<FProtectedCallContext*>(
+            lua_touserdata(L, 1));
+        lua_remove(L, 1);
+        check(context && context->accelerator);
+
+        int argumentIndex = 1;
+        for (FCheckerInfo& checkerInfo : context->accelerator->paramsChecker)
+        {
+            FProperty* prop = checkerInfo.prop;
+            if (checkerInfo.bInit && !(checkerInfo.bReference && lua_type(L, argumentIndex) == LUA_TUSERDATA))
+            {
+                if (!prop->HasAnyPropertyFlags(CPF_ZeroConstructor))
+                {
+                    prop->InitializeValue_InContainer(context->params);
+                }
+                *context->nextParamProperty = prop;
+                ++context->nextParamProperty;
+            }
+
+            if (checkerInfo.bLatent)
+            {
+                lua_State* mainThread = L->l_G->mainthread;
+                ULatentDelegate* latentObject = LuaObject::getLatentDelegate(mainThread);
+                const int threadRef = latentObject->getThreadRef(L);
+
+                FLatentActionInfo latentActionInfo(threadRef, GetTypeHash(FGuid::NewGuid()),
+                    *ULatentDelegate::NAME_LatentCallback, latentObject);
+                prop->CopySingleValue(prop->ContainerPtrToValuePtr<void>(context->params), &latentActionInfo);
+                *context->isLatentFunction = true;
+            }
+            else if (checkerInfo.bCheck)
+            {
+                PTRINT* pointer = context->outParams + checkerInfo.index;
+                *pointer = PTRINT(0);
+                const uint64 propFlags = prop->GetPropertyFlags();
+                if ((propFlags & CPF_OutParm) && lua_isnil(L, argumentIndex))
+                {
+                    ++argumentIndex;
+                    continue;
+                }
+
+                *pointer = PTRINT(checkerInfo.checker(
+                    L, prop, context->params + checkerInfo.offset, argumentIndex, false));
+                ++argumentIndex;
+            }
+        }
+
+        context->nextArgumentIndex = argumentIndex;
+        return 0;
+    }
+
+    int LuaFunctionAccelerator::protectedInvoke(lua_State* L)
+    {
+        FProtectedCallContext* context = static_cast<FProtectedCallContext*>(
+            lua_touserdata(L, 1));
+        lua_remove(L, 1);
+        check(context && context->accelerator && context->stack);
+
+        LuaFunctionAccelerator* accelerator = context->accelerator;
+        UFunction* function = accelerator->func;
+        const EFunctionFlags functionFlags = function->FunctionFlags;
+        uint8* returnValueAddress = accelerator->bHasReturnParam
+            ? context->params + function->ReturnValueOffset
+            : nullptr;
+
+        if (functionFlags & FUNC_Net)
+        {
+#if (ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4)
+            const int32 functionCallspace = context->object->GetFunctionCallspace(
+                function, context->params, context->stack);
+#else
+            const int32 functionCallspace = context->object->GetFunctionCallspace(function, context->stack);
+#endif
+            uint8* savedCode = nullptr;
+            if (functionCallspace & FunctionCallspace::Remote)
+            {
+                savedCode = context->stack->Code;
+                context->object->CallRemoteFunction(
+                    function, context->params, context->stack->OutParms, context->stack);
+            }
+
+            if (functionCallspace & FunctionCallspace::Local)
+            {
+                if (savedCode)
+                {
+                    context->stack->Code = savedCode;
+                }
+#if ENGINE_MINOR_VERSION >= 23 && (PLATFORM_MAC || PLATFORM_IOS)
+                FFrame* frame = context->stack;
+                function->Invoke(context->object, *frame, returnValueAddress);
+#else
+                function->Invoke(context->object, *context->stack, returnValueAddress);
+#endif
+            }
+        }
+        else
+        {
+            function->Invoke(context->object, *context->stack, returnValueAddress);
+        }
+
+        return 0;
     }
 
     int LuaFunctionAccelerator::call(lua_State* L, int offset, UObject* obj, bool& isLatentFunction, NewObjectRecorder* objRecorder)
@@ -188,16 +330,19 @@ namespace NS_SLUA
         }
 
         int i = offset;
-        uint16 propertiesSize = func->PropertiesSize;
-        uint8* params = (uint8*)FMemory_Alloca(propertiesSize);
-        uint16 paramsPointerSize = func->NumParms * sizeof(void*);
+        const int32 propertiesSize = func->GetStructureSize();
+        uint8* params = (uint8*)FMemory_Alloca_Aligned(propertiesSize, func->GetMinAlignment());
+        const SIZE_T paramsPointerSize = func->NumParms * sizeof(void*);
         FProperty** propertyList = (FProperty**)FMemory_Alloca(paramsPointerSize);
         PTRINT* outParams = (PTRINT*)FMemory_Alloca(paramsPointerSize);
 
         if (propertiesSize)
             FMemory::Memzero(params, propertiesSize);
         if (paramsPointerSize)
+        {
             FMemory::Memzero(propertyList, paramsPointerSize);
+            FMemory::Memzero(outParams, paramsPointerSize);
+        }
 
         FFrame newStack(obj, func, params, nullptr,
 #if ENGINE_MINOR_VERSION >= 25 || ENGINE_MAJOR_VERSION > 4
@@ -234,88 +379,86 @@ namespace NS_SLUA
             (*lastOut)->NextOutParm = NULL;
         }
 
-        int argNum = lua_gettop(L);
-        
-        for (auto& checkerInfo : paramsChecker)
+        const int originalArgumentCount = lua_gettop(L);
+        const int protectedArgumentCount = FMath::Max(originalArgumentCount - offset + 1, 0);
+        if (!lua_checkstack(L, protectedArgumentCount + 2))
         {
-            auto prop = checkerInfo.prop;
-            if (checkerInfo.bInit && !(checkerInfo.bReference && (lua_type(L, i) == LUA_TUSERDATA)))
+            lua_pushliteral(L, "insufficient stack for UFunction arguments");
+            return -1;
+        }
+        FProtectedCallContext context = {
+            this,
+            obj,
+            params,
+            propertyList,
+            outParams,
+            &newStack,
+            &isLatentFunction,
+            1
+        };
+
+        auto prepareProtectedCall = [&](lua_CFunction protectedFunction, bool bCopyArguments)
+        {
+            // Pass the synchronous context as an argument without allocating a CClosure.
+            lua_pushcfunction(L, protectedFunction);
+            lua_pushlightuserdata(L, &context);
+            int copiedArgumentCount = 1;
+            if (bCopyArguments)
             {
-                if (!prop->HasAnyPropertyFlags(CPF_ZeroConstructor))
+                for (int argumentIndex = offset; argumentIndex <= originalArgumentCount; ++argumentIndex)
                 {
-                    prop->InitializeValue_InContainer(params);
+                    lua_pushvalue(L, argumentIndex);
+                    ++copiedArgumentCount;
                 }
-                *propertyList = prop;
-                ++propertyList;
             }
+            return copiedArgumentCount;
+        };
 
-            if (checkerInfo.bLatent)
-            {
-                // bind a callback to the latent function
-                lua_State* mainThread = L->l_G->mainthread;
-
-                ULatentDelegate* latentObj = LuaObject::getLatentDelegate(mainThread);
-                int threadRef = latentObj->getThreadRef(L);
-                FLatentActionInfo LatentActionInfo(threadRef, GetTypeHash(FGuid::NewGuid()),
-                                                   *ULatentDelegate::NAME_LatentCallback, latentObj);
-
-                prop->CopySingleValue(prop->ContainerPtrToValuePtr<void>(params), &LatentActionInfo);
-                isLatentFunction = true;
-            }
-            else if (checkerInfo.bCheck)
-            {
-                PTRINT* pointer = outParams + checkerInfo.index;
-                *pointer = PTRINT(0);
-                // if is out param, can accept nil
-                uint64 propflag = prop->GetPropertyFlags();
-                if ((propflag & CPF_OutParm) && lua_isnil(L, i))
-                {
-                    i++;
-                    continue;
-                }
-
-                auto checker = checkerInfo.checker;
-                *pointer = PTRINT(checker(L, prop, params + checkerInfo.offset, i, false));
-                i++;
-            }
+        if (lua_pcall(L, prepareProtectedCall(&LuaFunctionAccelerator::protectedFillParams, true), 0, 0) != LUA_OK)
+        {
+            return -1;
         }
 
-        uint8* returnValueAddress = bHasReturnParam ? ((uint8*)params + func->ReturnValueOffset) : nullptr;
-        if (funcFlag & FUNC_Net)
-        {
-#if (ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4)
-            int32 functionCallspace = obj->GetFunctionCallspace(func, params, &newStack);
-#else
-            int32 functionCallspace = obj->GetFunctionCallspace(func, &newStack);
+        // lua_pushcfunction can run GC in Lua 5.3.4. Prepare the Lua frame before
+        // native locals exist; initialization is followed immediately by pcall.
+        const int invokeArgumentCount = prepareProtectedCall(&LuaFunctionAccelerator::protectedInvoke, false);
+
+#if WITH_DEV_AUTOMATION_TESTS
+        lastLocalInitializedCount = 0;
+        lastLocalDestroyedCount = 0;
 #endif
-            uint8* savedCode = NULL;
-
-            if (functionCallspace & FunctionCallspace::Remote)
+        // Initialize Blueprint locals around the protected Invoke and destroy
+        // them before processing its status. Parameters have their own owner above.
+        for (FProperty* property = func->FirstPropertyToInit; property;
+             property = property->PostConstructLinkNext)
+        {
+            if (!property->IsInContainer(func->ParmsSize))
             {
-                savedCode = newStack.Code;
-                // Since this is native, we need to rollback the stack if we are calling both remotely and locally
-                obj->CallRemoteFunction(func, params, newStack.OutParms, &newStack);
-            }
-
-            if (functionCallspace & FunctionCallspace::Local)
-            {
-                if (savedCode)
-                {
-                    newStack.Code = savedCode;
-                }
-#if ENGINE_MINOR_VERSION >= 23 && (PLATFORM_MAC || PLATFORM_IOS)
-                FFrame *frame = (FFrame *)&newStack;
-                func->Invoke(obj, *frame, returnValueAddress);
-#else
-                func->Invoke(obj, newStack, returnValueAddress);
+                property->InitializeValue_InContainer(params);
+#if WITH_DEV_AUTOMATION_TESTS
+                ++lastLocalInitializedCount;
 #endif
             }
         }
-        else
+        const int invokeStatus = lua_pcall(L, invokeArgumentCount, 0, 0);
+        for (FProperty* property = func->DestructorLink; property;
+             property = property->DestructorLinkNext)
         {
-            func->Invoke(obj, newStack, returnValueAddress);
+            if (!property->IsInContainer(func->ParmsSize))
+            {
+                property->DestroyValue_InContainer(params);
+#if WITH_DEV_AUTOMATION_TESTS
+                ++lastLocalDestroyedCount;
+#endif
+            }
+        }
+        if (invokeStatus != LUA_OK)
+        {
+            return -1;
         }
 
+        i = offset + context.nextArgumentIndex - 1;
+        const int argNum = originalArgumentCount;
         int32 ret = 0;
         if (bHasReturnParam)
         {
@@ -342,14 +485,73 @@ namespace NS_SLUA
                 ret += pusherInfo.pusher(L, prop, src, 0, objRecorder);
             }
         }
-        
+
         return ret;
     }
 
+#if WITH_DEV_AUTOMATION_TESTS
+    bool LuaFunctionAccelerator::runFunctionLocalLifetimeProbeForTests(
+        lua_State* L, bool bForceLuaError, int32& outInitializedCount, int32& outDestroyedCount)
+    {
+        outInitializedCount = 0;
+        outDestroyedCount = 0;
+        if (!L)
+        {
+            return false;
+        }
+
+        const FName FunctionName = MakeUniqueObjectName(
+            UObject::StaticClass(), UFunction::StaticClass(), TEXT("SluaFunctionLocalLifetimeProbe"));
+        UFunction* function = NewObject<UFunction>(UObject::StaticClass(), FunctionName, RF_Transient);
+        function->FunctionFlags = FUNC_Native | FUNC_HasDefaults;
+
+        FStructProperty* structLocal = new FStructProperty(function, TEXT("StructLocal"));
+        structLocal->Struct = TBaseStructure<FSoftObjectPath>::Get();
+        function->AddCppProperty(structLocal);
+
+        FArrayProperty* arrayLocal = new FArrayProperty(function, TEXT("ArrayLocal"));
+        arrayLocal->AddCppProperty(new FStrProperty(arrayLocal, TEXT("Inner")));
+        function->AddCppProperty(arrayLocal);
+
+        FStrProperty* stringLocal = new FStrProperty(function, TEXT("StringLocal"));
+        function->AddCppProperty(stringLocal);
+        function->StaticLink(true);
+        function->SetNativeFunc(&FunctionLocalLifetimeProbe);
+
+        // A native-class-owned synthetic UFunction does not receive the Blueprint-generated
+        // local chains. Build the same chains explicitly so the probe exercises the runtime
+        // contract consumed by LuaFunctionAccelerator::call().
+        function->FirstPropertyToInit = stringLocal;
+        stringLocal->PostConstructLinkNext = arrayLocal;
+        arrayLocal->PostConstructLinkNext = structLocal;
+        structLocal->PostConstructLinkNext = nullptr;
+        function->DestructorLink = stringLocal;
+        stringLocal->DestructorLinkNext = arrayLocal;
+        arrayLocal->DestructorLinkNext = structLocal;
+        structLocal->DestructorLinkNext = nullptr;
+
+        LuaFunctionAccelerator accelerator(function);
+        bool bLatentFunction = false;
+        const int32 stackTop = lua_gettop(L);
+        GFunctionLocalLifetimeProbeState = bForceLuaError ? L : nullptr;
+        const int32 result = accelerator.call(L, 1, GetTransientPackage(), bLatentFunction, nullptr);
+        GFunctionLocalLifetimeProbeState = nullptr;
+
+        outInitializedCount = accelerator.lastLocalInitializedCount;
+        outDestroyedCount = accelerator.lastLocalDestroyedCount;
+        const bool bExpectedResult = bForceLuaError ? result < 0 : result == 0;
+        if (result < 0 && lua_gettop(L) > stackTop)
+        {
+            lua_settop(L, stackTop);
+        }
+        return bExpectedResult && !bLatentFunction;
+    }
+#endif
+
     void LuaFunctionAccelerator::fillParam(lua_State* L,int i, NewObjectRecorder* objRecorder,const PostFillParamCallback& callback ,bool &isLatentFunction) {
-        uint16 paramsPointerSize = func->NumParms * sizeof(void*);
+        const SIZE_T paramsPointerSize = func->NumParms * sizeof(void*);
         uint16 parmsSize = func->ParmsSize;
-        uint8* params = (uint8*)FMemory_Alloca(parmsSize);
+        uint8* params = (uint8*)FMemory_Alloca_Aligned(parmsSize, func->GetMinAlignment());
         FProperty** propertyList = (FProperty**)FMemory_Alloca(paramsPointerSize);
         PTRINT* outParams = (PTRINT*)FMemory_Alloca(paramsPointerSize);
         if (parmsSize)
@@ -433,7 +635,7 @@ namespace NS_SLUA
                 ret += pusherInfo.pusher(L, prop, src, 0, objRecorder);
             }
         }
-        
+
         return ret;
     }
 }

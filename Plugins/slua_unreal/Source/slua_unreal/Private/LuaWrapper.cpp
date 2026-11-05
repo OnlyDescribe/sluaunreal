@@ -16,6 +16,9 @@
 #include "LuaNetSerialization.h"
 #include "UObject/Package.h"
 #include "Misc/FrameTime.h"
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+#include "Misc/FallbackStruct.h"
+#endif
 
 #define SLUA_GCSTRUCT(typeName) auto flag = udptr->flag; \
                     if (udptr->parent) { \
@@ -52,18 +55,24 @@ namespace NS_SLUA {
 	    return FindObjectSafe<UScriptStruct>(CoreUObjectPkg, Name);
     }
 
-#if ((ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4))
+#if ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION < 25
     #include "LuaWrapper4.18.inc"
-#elif ((ENGINE_MINOR_VERSION>=25) && (ENGINE_MAJOR_VERSION==4))
+#elif ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION >= 25
     #include "LuaWrapper4.25.inc"
-#elif ((ENGINE_MINOR_VERSION==1) && (ENGINE_MAJOR_VERSION==5))
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 1
     #include "LuaWrapper5.1.inc"
-#elif ((ENGINE_MINOR_VERSION==2) && (ENGINE_MAJOR_VERSION==5))
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 2
     #include "LuaWrapper5.2.inc"
-#elif ((ENGINE_MINOR_VERSION==3) && (ENGINE_MAJOR_VERSION==5))
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 3
     #include "LuaWrapper5.3.inc"
-#elif ((ENGINE_MINOR_VERSION==4) && (ENGINE_MAJOR_VERSION==5))
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 4
     #include "LuaWrapper5.4.inc"
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 7
+    #include "LuaWrapper5.7.inc"
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 8
+    #include "LuaWrapper5.8.inc"
+#else
+    #error "No generated slua wrapper pair for this Unreal Engine version. Generate and validate a matching pair."
 #endif
 
     static inline FSoftObjectPtr* __newFSoftObjectPtr() {

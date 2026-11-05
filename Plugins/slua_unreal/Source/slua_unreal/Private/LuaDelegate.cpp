@@ -147,6 +147,8 @@ namespace NS_SLUA {
 
     int LuaMultiDelegate::Add(lua_State* L) {
         CheckUD(LuaMultiDelegateWrap,L,1);
+        if (!LuaFunctionAccelerator::IsValid(UD->funcAcc))
+            return luaL_error(L, "Delegate function accelerator is invalid");
 
         int type = lua_type(L, 2);
         switch (type)
@@ -323,6 +325,8 @@ namespace NS_SLUA {
 
     int LuaMultiDelegate::Broadcast(lua_State* L) {
         CheckUD(LuaMultiDelegateWrap,L,1);
+        if (!LuaFunctionAccelerator::IsValid(UD->funcAcc))
+            return luaL_error(L, "Delegate function accelerator is invalid");
 
         auto callBroadcast = [UD, L](const FMulticastScriptDelegate* delegate)
         {
@@ -333,7 +337,11 @@ namespace NS_SLUA {
 
             auto callback = [delegate](uint8* params, PTRINT* outParams, NewObjectRecorder *objectRecorder)
             {
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+                delegate->ProcessDelegate<UObject>(params);
+#else
                 delegate->ProcessMulticastDelegate<UObject>(params);
+#endif
             };
             bool isLatentFunction;
             UD->funcAcc->fillParam(L, 2, nullptr, callback, isLatentFunction);

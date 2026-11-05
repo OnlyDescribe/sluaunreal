@@ -20,6 +20,7 @@
 #include "Delegates/IDelegateInstance.h"
 #include "Internationalization/Regex.h"
 #include "Fonts/SlateFontInfo.h"
+#include "Styling/CoreStyle.h"
 #include "Math/Vector2D.h"
 #include "Math/Color.h"
 #include "LuaProfiler.h"
@@ -41,10 +42,15 @@
 #include "Misc/Paths.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SSlider.h"
+#include "Runtime/Launch/Resources/Version.h"
+#include "SluaMicro.h"
+#if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
+#include "Stats/Stats.h"
+#else
 #include "Stats/Stats2.h"
+#endif
 #include "Developer/DesktopPlatform/Public/DesktopPlatformModule.h"
 #include "SluaProfilerDataManager.h"
-#include "Runtime/Launch/Resources/Version.h"
 
 ///////////////////////////////////////////////////////////////////////////
 SProfilerInspector::SProfilerInspector()
@@ -584,7 +590,9 @@ TSharedRef<class SDockTab>  SProfilerInspector::GetSDockTab()
 
     // init tree view
     SAssignNew(treeview, STreeView<TSharedPtr<FunctionProfileNode>>)
+#if !((ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7)))
     .ItemHeight(800)
+#endif
     .TreeItemsSource(&profileRootArr)
     .OnGenerateRow_Raw(this, &SProfilerInspector::OnGenerateRowForList)
     .OnGetChildren_Raw(this, &SProfilerInspector::OnGetChildrenForTree)
@@ -636,7 +644,9 @@ TSharedRef<class SDockTab>  SProfilerInspector::GetSDockTab()
     );
     
     SAssignNew(memTreeView, STreeView<TSharedPtr<FileMemInfo>>)
+#if !((ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7)))
     .ItemHeight(800)
+#endif
     .TreeItemsSource(&shownParentFileName)
     .OnGenerateRow_Raw(this, &SProfilerInspector::OnGenerateMemRowForList)
     .OnGetChildren_Raw(this, &SProfilerInspector::OnGetMemChildrenForTree)
@@ -1368,7 +1378,7 @@ void SProfilerInspector::CombineSameFileInfo(FProflierMemNode& proflierMemNode, 
 
     if (shownParentFileName.Num() > maxMemoryFile)
     {
-        shownParentFileName.RemoveAt(maxMemoryFile, shownParentFileName.Num() - maxMemoryFile, false);
+        shownParentFileName.RemoveAt(maxMemoryFile, shownParentFileName.Num() - maxMemoryFile, SLUA_ALLOW_SHRINKING_NO);
     }
 }
 
@@ -1964,7 +1974,11 @@ void SProfilerTabWidget::Construct(const FArguments& InArgs)
                     .Padding(15.0f, 15.0f)
                     [
                         SNew(STextBlock)
+#if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
+                        .Font(FCoreStyle::GetDefaultFontStyle("Bold", 13))
+#else
                         .Font(FSlateFontInfo(FPaths::EngineContentDir() / TEXT("Slate/Fonts/Roboto-Bold.ttf"), 13))
+#endif
                         .ColorAndOpacity(FLinearColor(1, 1, 1, 0.5))
                         .Text(InArgs._TabName)
                     ]

@@ -355,7 +355,7 @@ namespace NS_SLUA {
 
         int stateIndex;
 
-        typedef struct {
+        struct lua_var {
             union {
                 RefRef* ref;
                 lua_Integer i;
@@ -364,8 +364,8 @@ namespace NS_SLUA {
                 void* ptr;
                 bool b;
             };
-            Type luatype;
-        } lua_var;
+            Type luatype = LV_NIL;
+        };
 
         lua_var* vars;
         size_t numOfVar;
@@ -373,6 +373,7 @@ namespace NS_SLUA {
         template<class F,class ...ARGS>
         int pushArg(F f,ARGS&& ...args) const {
             auto L = getState();
+            luaL_checkstack(L, LUA_MINSTACK, "Lua arguments");
             LuaObject::push(L,f);
             return 1+pushArg(std::forward<ARGS>(args)...);
         }

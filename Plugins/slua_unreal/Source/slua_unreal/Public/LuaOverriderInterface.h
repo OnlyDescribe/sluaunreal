@@ -26,33 +26,20 @@ public:
     virtual void PostLuaHook();
 
     void TryHook();
+    bool TryHook(NS_SLUA::LuaState* LuaState);
 
-    NS_SLUA::LuaVar GetCachedLuaFunc(NS_SLUA::lua_State* L, const NS_SLUA::LuaVar selfTable, const FString& FunctionName) {
-#if WITH_EDITOR
-        if (Cast<UBlueprintFunctionLibrary>(this)) {
-            return getFromTableIndex<NS_SLUA::LuaVar>(L, selfTable, FunctionName);
-        }
-#endif
-        auto luaFuncPtr = FuncMap.Find(FunctionName);
-        if (!luaFuncPtr)
-        {
-            return FuncMap.Add(FunctionName, getFromTableIndex<NS_SLUA::LuaVar>(L, selfTable, FunctionName));
-        }
-        if (L != nullptr && luaFuncPtr->getState() != L)
-        {
-            return getFromTableIndex<NS_SLUA::LuaVar>(L, selfTable, FunctionName);
-        }
-        return *luaFuncPtr;
-    }
+    // LUA_OK with a nil function means genuinely absent; other statuses carry a lookup error.
+    int ResolveLuaFunction(NS_SLUA::lua_State* L, const NS_SLUA::LuaVar& SelfTable,
+        const FString& FunctionName, NS_SLUA::LuaVar& Function, FString& Error);
 
-    bool IsLuaFunctionExist(const FString& FunctionName) {
-        const NS_SLUA::LuaVar selfTable = GetSelfTable(nullptr);
-        if (!selfTable.isValid() || !selfTable.isTable()) {
-            return false;
-        }
+    static int LookupLuaFunction(NS_SLUA::lua_State* L, const NS_SLUA::LuaVar& SelfTable,
+        const FString& FunctionName, NS_SLUA::LuaVar& Function, FString& Error);
 
-        return GetCachedLuaFunc(nullptr, selfTable, FunctionName).isFunction();
-    }
+    // Lua operations; the caller supplies the protection boundary.
+    static void PushLuaFunction(NS_SLUA::lua_State* L, const NS_SLUA::LuaVar& Self, const FString& Name);
+    void PushLuaFunctionCached(NS_SLUA::lua_State* L, const NS_SLUA::LuaVar& Self, const FString& Name);
+
+    bool IsLuaFunctionExist(const FString& FunctionName);
 
     template<class RET, class ...ARGS>
     RET CallLuaFunction(const FString& FunctionName, ARGS&& ...Args) {
@@ -94,65 +81,33 @@ public:
         Call<void>(true, World, FunctionName, std::forward<ARGS>(Args)...);
     }
 
-    template<typename R, typename T>
-    static R getFromTableIndex(NS_SLUA::lua_State* L, const NS_SLUA::LuaVar& table, T key) {
-        if (!L) {
-            L = table.getState();
-        }
-        if (!L) {
-            return R();
-        }
-        NS_SLUA::AutoStack as(L);
-        table.push(L);
-        if (lua_getmetatable(L, -1)) {
-            int top = lua_gettop(L);
-            if (lua_getfield(L, -1, "__index") != LUA_TNIL) {
-                table.push(L);
-                lua_pushstring(L, TCHAR_TO_UTF8(*key));
-                lua_pushboolean(L, true); // lua first
-
-                if (lua_pcall(L, 3, 1, 0))
-                    lua_pop(L, 1);
-
-                int ret = lua_gettop(L) - top;
-                return NS_SLUA::LuaVar(L, -ret);
-            }
-        }
-        return R();
-    }
-
 private:
     template<class RET, class ...ARGS>
     RET Call(bool checkExist, const UWorld* World, const FString& FunctionName, ARGS&& ...Args) {
-        auto LS = World ? NS_SLUA::LuaState::get(World->GetGameInstance()) : nullptr;
-        auto selfTable = GetSelfTable(LS);
-        if (!checkExist && (!selfTable.isValid() || !selfTable.isTable())) {
-            NS_SLUA::Log::Error("Lua module not assign to UObject[%s]", TCHAR_TO_UTF8(*Cast<UObject>(this)->GetName()));
+        auto* LS = World ? NS_SLUA::LuaState::get(World->GetGameInstance()) : nullptr;
+        const auto Self = GetSelfTable(LS);
+        if (!Self.isValid() || !Self.isTable()) {
+            if (!checkExist) {
+                NS_SLUA::Log::Error("Lua module not assigned to UObject[%s]", TCHAR_TO_UTF8(*Cast<UObject>(this)->GetName()));
+            }
             return RET();
         }
-
-        const NS_SLUA::LuaVar& Func = GetCachedLuaFunc(LS ? LS->getLuaState() : nullptr, selfTable, FunctionName);
-        if (!checkExist)
-        {
-            NS_SLUA::LuaVar ret = Func.call(selfTable, std::forward<ARGS>(Args)...);
-            if (ret.isValid())
-            {
-                return ret.castTo<RET>();
-            }
+        NS_SLUA::LuaVar Function;
+        FString Error;
+        if (ResolveLuaFunction(LS ? LS->getLuaState() : nullptr, Self, FunctionName, Function, Error) != LUA_OK) {
+            NS_SLUA::Log::Error("%s.%s: %s", TCHAR_TO_UTF8(*Cast<UObject>(this)->GetName()),
+                TCHAR_TO_UTF8(*FunctionName), TCHAR_TO_UTF8(*Error));
+            return RET();
         }
-        else
-        {
-            if (Func.isFunction())
-            {
-                NS_SLUA::LuaVar ret = Func.call(selfTable, std::forward<ARGS>(Args)...);
-                if (ret.isValid())
-                {
-                    return ret.castTo<RET>();
-                }
+        if (Function.isNil()) {
+            if (!checkExist) {
+                NS_SLUA::Log::Error("%s: required Lua function %s is missing",
+                    TCHAR_TO_UTF8(*Cast<UObject>(this)->GetName()), TCHAR_TO_UTF8(*FunctionName));
             }
+            return RET();
         }
-
-        return RET();
+        auto Result = Function.call(Self, std::forward<ARGS>(Args)...);
+        return Result.isValid() ? Result.template castTo<RET>() : RET();
     }
 
 public:

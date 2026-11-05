@@ -25,8 +25,14 @@ namespace NS_SLUA {
         static LuaFunctionAccelerator* findOrAdd(UFunction* inFunc);
         static bool remove(UFunction* inFunc);
         static void clear();
+        static bool IsValid(LuaFunctionAccelerator* Accel);
 
         int call(lua_State* L, int offset, UObject* obj, bool& isLatentFunction, NewObjectRecorder* objRecorder);
+
+#if WITH_DEV_AUTOMATION_TESTS
+        static bool runFunctionLocalLifetimeProbeForTests(
+            lua_State* L, bool bForceLuaError, int32& outInitializedCount, int32& outDestroyedCount);
+#endif
 
         void fillParam(lua_State* L, int i, NewObjectRecorder* objRecorder, const PostFillParamCallback& callback, bool &isLatentFunction);
         int returnValue(lua_State* L, int i, uint8* params, PTRINT* outParams, NewObjectRecorder* objRecorder);
@@ -37,26 +43,24 @@ namespace NS_SLUA {
 
     protected:
         static TMap<UFunction*, LuaFunctionAccelerator*> cache;
+        static TSet<LuaFunctionAccelerator*> ValidAccels;
 
         struct AutoDestructor
         {
             AutoDestructor(FProperty** propertys, uint8* params, uint16 numParams)
                 : propertyList(propertys)
-                  , paramAddress(params)
-                  , paramsMax(numParams)
+                , paramAddress(params)
+                , paramsMax(numParams)
             {
             }
 
             ~AutoDestructor()
             {
-                if (propertyList)
+                for (uint16 index = 0; index < paramsMax; ++index)
                 {
-                    uint16 paramIndex = 0;
-                    for (FProperty* it = *propertyList; it && paramIndex < paramsMax; it = *(++propertyList), ++
-                         paramIndex)
-                    {
-                        it->DestroyValue_InContainer(paramAddress);
-                    }
+                    FProperty* property = propertyList[index];
+                    if (!property) break;
+                    property->DestroyValue_InContainer(paramAddress);
                 }
             }
 
@@ -64,6 +68,10 @@ namespace NS_SLUA {
             uint8* paramAddress;
             uint16 paramsMax;
         };
+
+        struct FProtectedCallContext;
+        static int protectedFillParams(lua_State* L);
+        static int protectedInvoke(lua_State* L);
 
         bool bNativeFunc;
         
@@ -97,6 +105,11 @@ namespace NS_SLUA {
         bool bHasReturnParam;
         FPusherInfo returnPusherInfo;
         TArray<FPusherInfo> outPropsPusher;
+
+#if WITH_DEV_AUTOMATION_TESTS
+        int32 lastLocalInitializedCount = 0;
+        int32 lastLocalDestroyedCount = 0;
+#endif
     };
     
 }

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "luaVersion": "5.3.4",
+  "generator": "Visual Studio 18 2026",
+  "architecture": "x64",
+  "configuration": "RelWithDebInfo",
+  "compilerVersion": "19.51.36260.0",
+  "compileDefinitions": [
+    "LUA_BUILD_AS_DLL",
+    "LUA_STATIC_LINK"
+  ],
+  "cmakeSource": "Plugins/slua_unreal/CMakeLists.txt",
+  "library": "Plugins/slua_unreal/Library/Win64/lua.lib",
+  "librarySha256": "A0F4D25D04CD4329F191F42DDD2FCF3F1D1F9643E6229128BBBA81D90B3A91FD",
+  "cli": "Plugins/slua_unreal/Library/Win64/lua.exe",
+  "cliSha256": "28F78A0D4A6F8791D6B9BC230E03083E589D58A749DB99B219454C2CD47B406C"
+}

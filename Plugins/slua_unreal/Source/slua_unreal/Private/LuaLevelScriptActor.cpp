@@ -23,21 +23,32 @@ void ALuaLevelScriptActor::onLuaStateInit(NS_SLUA::lua_State* L)
 {
     if (!HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject))
     {
-        TryHook();
+        NS_SLUA::LuaState* state = NS_SLUA::LuaState::get(L);
+        UWorld* world = GetWorld();
+        if (state && world && state->getGameInstance() == world->GetGameInstance())
+        {
+            TryHook(state);
+        }
     }
 }
 
 void ALuaLevelScriptActor::RegistLuaTick(float TickInterval)
 {
     EnableLuaTick = true;
-    auto state = NS_SLUA::LuaState::get();
-    state->registLuaTick(this, TickInterval);
+    UWorld* world = GetWorld();
+    if (auto* state = NS_SLUA::LuaState::get(world ? world->GetGameInstance() : nullptr))
+    {
+        state->registLuaTick(this, TickInterval);
+    }
 }
 
 void ALuaLevelScriptActor::UnRegistLuaTick()
 {
-    auto state = NS_SLUA::LuaState::get();
-    state->unRegistLuaTick(this);
+    UWorld* world = GetWorld();
+    if (auto* state = NS_SLUA::LuaState::get(world ? world->GetGameInstance() : nullptr))
+    {
+        state->unRegistLuaTick(this);
+    }
 }
 
 void ALuaLevelScriptActor::EndPlay(const EEndPlayReason::Type EndPlayReason)

@@ -241,12 +241,41 @@
 ** the libraries, you may want to use the following definition (define
 ** LUA_BUILD_AS_DLL to get it).
 */
-#if defined(LUA_BUILD_AS_DLL)	/* { */
-#if defined(LUA_CORE) || defined(LUA_LIB)	/* { */
+/*
+** LUA_STATIC_LINK is set by the CMake build (lua static archive + lua_cli)
+** and MUST take priority over LUA_BUILD_AS_DLL: when both are defined we
+** want lua.lib / lua_cli to expose Lua's C API as plain `extern` symbols,
+** with no dllexport / dllimport attributes baked in. The slua_unreal UE
+** module compiles with only LUA_BUILD_AS_DLL (+ private LUA_CORE) and
+** re-exports those plain symbols from slua_unreal.dll explicitly via
+** Source/slua_unreal/Private/LuaExports.cpp (linker /EXPORT pragmas).
+*/
+#if defined(LUA_STATIC_LINK) /* { */
+#if defined(_WIN32) && defined(__cplusplus)
+#define LUA_API extern "C"
+#elif defined(_WIN32)
+#define LUA_API extern
+#else
+#define LUA_API extern
+#endif
+#elif defined(LUA_BUILD_AS_DLL)           /* }{ */
+#if defined(LUA_CORE) || defined(LUA_LIB) /* { */
+#if defined(_WIN32) && defined(__cplusplus)
+#define LUA_API extern "C" __declspec(dllexport)
+#elif defined(_WIN32)
 #define LUA_API __declspec(dllexport)
-#else						/* }{ */
+#else
+#define LUA_API extern
+#endif
+#else /* }{ */
+#if defined(_WIN32) && defined(__cplusplus)
+#define LUA_API extern "C" __declspec(dllimport)
+#elif defined(_WIN32)
 #define LUA_API __declspec(dllimport)
-#endif						/* } */
+#else
+#define LUA_API extern
+#endif
+#endif /* } */
 
 #else				/* }{ */
 
@@ -254,12 +283,18 @@
 
 #endif				/* } */
 
-#if defined(_WIN32)
-#undef LUA_API
-#define LUA_API extern "C" __declspec(dllexport)
+/* more often than not the libs go together with the core */
+/* Public APIs that can propagate a Lua error or yield use this specification,
+** independent of their current callers. The C++ VM unwinds with exceptions;
+** preserve the C export ABI without /EHsc's implicit non-throwing assumption.
+** Keep declarations and definitions synchronized; internal helpers need no
+** blanket annotation. Non-raising APIs retain their original declarations. */
+#if defined(__cplusplus)
+#define LUA_THROWS noexcept(false)
+#else
+#define LUA_THROWS
 #endif
 
-/* more often than not the libs go together with the core */
 #define LUALIB_API	LUA_API
 #define LUAMOD_API	LUALIB_API
 

@@ -207,7 +207,7 @@ namespace NS_SLUA {
     template<typename FP = FProperty>
     FP* newProperty(const FFieldVariant* owner, FFieldClass* cls, FName propName)
     {
-        FP* prop = CastField<FP>(cls->Construct(*owner, propName == NAME_None ? DefaultLuaPropertyName : propName, RF_NoFlags));
+        FP* prop = CastField<FP>(cls->Construct(*owner, propName == NAME_None ? DefaultLuaPropertyName : propName));
         if (prop)
         {
             prop->ArrayDim = 1;

@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-//#include <lstate.h> // For PUBG Mobile
 #ifdef G
     #undef G
 #endif
@@ -13,9 +12,14 @@
 #include "UObject/CoreNative.h"
 #include "Runtime/Launch/Resources/Version.h"
 
+#if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
+    #define SLUA_ALLOW_SHRINKING_NO EAllowShrinking::No
+#else
+    #define SLUA_ALLOW_SHRINKING_NO false
+#endif
+
 namespace NS_SLUA
 {
-    //typedef lua_State lua_State; // For PUBG Mobile
 
 #if (ENGINE_MINOR_VERSION<25) && (ENGINE_MAJOR_VERSION==4)
     #define CastField Cast
@@ -63,4 +67,13 @@ namespace NS_SLUA
 #else
     typedef FNativeFuncPtr FNativeFuncPtr;
 #endif
+
+    FORCEINLINE int32 GetPropertyElementSize(const FProperty* InProperty)
+    {
+#if (ENGINE_MAJOR_VERSION > 5) || ((ENGINE_MAJOR_VERSION == 5) && (ENGINE_MINOR_VERSION >= 7))
+        return InProperty->GetElementSize();
+#else
+        return InProperty->ElementSize;
+#endif
+    }
 }

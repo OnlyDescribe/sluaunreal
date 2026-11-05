@@ -103,7 +103,7 @@ namespace NS_SLUA {
             return;
         }
         StopSimulateLua();
-        SluaState = new NS_SLUA::LuaState("", nullptr);
+        SluaState = new NS_SLUA::LuaState("", nullptr, false);
         SluaState->setLoadFileDelegate(Delegate);
         SluaState->init();
     }

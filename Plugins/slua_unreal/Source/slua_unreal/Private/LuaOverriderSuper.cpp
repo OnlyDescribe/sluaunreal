@@ -125,6 +125,9 @@ namespace NS_SLUA
             outParamCount = funcAcc->call(L, 2, obj, isLatentFunction, &objectRecorder);
         }
 
+        if (outParamCount < 0)
+            return lua_error(L);
+
         if (isLatentFunction)
             return lua_yield(L, outParamCount);
         return outParamCount;
